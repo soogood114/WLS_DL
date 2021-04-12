@@ -112,7 +112,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         return
 
     """NETWORK INITIALIZATION"""
-    saving_code_folder_name = params["saving_sub_folder_name"] + "/trained_net_code"
+    saving_code_folder_name = params["saving_sub_folder_name"] + "/net_code"
     if not os.path.exists(saving_code_folder_name):
         os.mkdir(saving_code_folder_name)
 
@@ -133,7 +133,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         mynet = models_v2.WLS_net_FG_v1(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21,
                                         epsilon=0.0001,
                                         pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True,
-                                        is_resnet=True, FG_mode=1).train().to(device)
+                                        is_resnet=True, FG_mode=0).train().to(device)
         shutil.copy("../Models/models_v2.py", saving_code_folder_name + "/saved_models_v2.py")
 
 
@@ -213,7 +213,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
 
             "INTERMEDIATE RESULTING PATCH SAVING"
             if (epoch + 1) % params["val_patches_saving_epoch"] == 0:
-                inter_patch_folder_name = params["saving_sub_folder_name"] + "./val_patches"
+                inter_patch_folder_name = params["saving_sub_folder_name"] + "/val_patches"
                 if not os.path.exists(inter_patch_folder_name):
                     os.mkdir(inter_patch_folder_name)
 
