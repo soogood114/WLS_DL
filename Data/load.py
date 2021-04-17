@@ -656,6 +656,67 @@ def load_exrs_from_tungsten(DIR, SCENE, BUFFER, mini_batch=True, flag_saving=Fal
     return input_buffer, ref_buffer
 
 
+def load_normalize_one_exr_for_test(input_pth, ref_pth, BUFFER, load_dtype="HALF", color_merge=True):
+
+
+    channels = {"diffuse": 3, "specular": 3, "albedo": 3, "depth": 1, "normal": 3, "diffuseVariance": 1,
+                "specularVariance": 1, "albedoVariance": 1, "depthVariance": 1, "normalVariance": 1}
+
+    input_all_buffer = exr.read_all(input_pth, precision=load_dtype)
+    ref_all_buffer = exr.read_all(ref_pth, precision=load_dtype)
+
+    # test_depth = input_all_buffer['depth']
+
+
+    "저장 공간 설정 from sample"
+    total_ch = 0
+    ch_BUFFER = []
+    for b in BUFFER:
+        # h, w, ch = sample_dict[b].shape()
+        sample_data = input_all_buffer[b]
+        h, w, ch = sample_data.shape
+        total_ch += ch
+        ch_BUFFER.append(ch)
+
+    # color
+    if color_merge:
+        input_buffer = np.zeros((1, h, w, total_ch - 3), dtype=sample_data.dtype)
+        ref_buffer = np.zeros((1, h, w, 3), dtype=sample_data.dtype)
+
+        input_buffer[0, :, :, :3] = norm.normalization_signed_log(input_all_buffer["diffuse"]
+                                                                  + input_all_buffer["specular"])
+        ref_buffer[0, :, :, :3] = norm.normalization_signed_log(ref_all_buffer["diffuse"]
+                                                                  + ref_all_buffer["specular"])
+        start_ch = 3
+    else:
+        input_buffer = np.zeros((1, h, w, total_ch), dtype=sample_data.dtype)
+        ref_buffer = np.zeros((1, h, w, 6), dtype=sample_data.dtype)
+
+        input_buffer[0, :, :, :3] = norm.normalization_signed_log(input_all_buffer["diffuse"])
+        input_buffer[0, :, :, 3:6] = norm.normalization_signed_log(input_all_buffer["specular"])
+        ref_buffer[0, :, :, :3] = norm.normalization_signed_log(ref_all_buffer["diffuse"])
+        ref_buffer[0, :, :, 3:6] = norm.normalization_signed_log(ref_all_buffer["specular"])
+        start_ch = 6
+
+    # g-buffer
+    for b in range(len(BUFFER)):
+        if BUFFER[b] == 'depth':
+            input_buffer[:, :, :, start_ch:start_ch + channels[BUFFER[b]]] = norm.normalize_depth_1ch_v1(
+                input_all_buffer[BUFFER[b]])
+            start_ch += channels[BUFFER[b]]
+        elif BUFFER[b] == 'normal':
+            input_buffer[:, :, :, start_ch:start_ch + channels[BUFFER[b]]] = norm.normalize_normal(
+                input_all_buffer[BUFFER[b]])
+            start_ch += channels[BUFFER[b]]
+        elif BUFFER[b] == 'albedo':
+            input_buffer[:, :, :, start_ch:start_ch + channels[BUFFER[b]]] = input_all_buffer[BUFFER[b]]
+            start_ch += channels[BUFFER[b]]
+
+    return input_buffer, ref_buffer
+
+
+
+
 def get_npy_tungsten_and_normalize_v1(DIR, BUFFER, color_merge=True):
     """
     input : pth, mini_batch

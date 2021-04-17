@@ -3,9 +3,14 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 
+import Data.other_tools as other_tools
+import Data.exr as exr
+
+
 import Feed_and_Loss.loss as my_loss
 import Models.resnet as resnet
 import Models.NGPT_models as NGPT
+import Models.models_KPCN as KPCN
 
 """ !!!!!!!!!!!!!!!!!!!!!!!!!! 주의  !!!!!!!!!!!!!!!!!!!!!!!!!!  """
 """ 
@@ -23,6 +28,18 @@ class Design_feature_generator(nn.Module):
 
     def forward(self, input):
         return torch.sigmoid(self.back_bone(input))  # [0, 1]
+
+class Design_feature_denoisor(nn.Module):
+    def __init__(self, params, ch_in):
+        super(Design_feature_denoisor, self).__init__()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.denoisor = KPCN.KPCN_for_FG_v1(params, ch_in=ch_in, kernel_size=3, n_layers=10, length_p_kernel=5,
+                                            no_soft_max=False, pad_mode=0, is_resnet=True).train().to(device)
+
+    def forward(self, input):
+        return self.denoisor(input)
+
 
 
 class WLS_net_FG_v1(nn.Module):
@@ -85,6 +102,9 @@ class WLS_net_FG_v1(nn.Module):
         elif self.FG_mode == 1:
             # second : design = FG(G-buffer)
             self.FG_net = Design_feature_generator(self.params, ch_in=7, ch_out=3)
+        else:
+            # third : design matrix denoisor with KPCN
+            self.FG_net = Design_feature_denoisor(self.params, ch_in=7)
 
         # grid
         if self.reg_order > 0:
@@ -142,7 +162,8 @@ class WLS_net_FG_v1(nn.Module):
         W = F.softmax(W, dim=1)
 
         "KERNEL REGRESSION"
-        out = self.kernel_regression(input, W, test_mode=False)
+        ones = torch.ones((b, 1, h, w), dtype=input.dtype, layout=input.layout, device=input.device)
+        out = self.kernel_regression(ones, input, W, test_mode=False)
 
         if only_img_out == True:
             return self.make_full_res_out(out, b, h, w, length_p_kernel, W)
@@ -151,6 +172,7 @@ class WLS_net_FG_v1(nn.Module):
                 return self.make_full_res_out(out, b, h, w, length_p_kernel, W), self.get_loss(out, ref, W)
             else:
                 return out, self.get_loss(out, ref, W)
+
 
     def test_chunkwise(self, input_full, chunk_size=200):
         """
@@ -184,11 +206,21 @@ class WLS_net_FG_v1(nn.Module):
         W_full = F.softmax(W_full, dim=1)
 
         if self.FG_mode == 0:
+            # Feature generation using color and g-buffer
             design_full = self.FG_net(input_full)
         elif self.FG_mode == 1:
+            # Feature generation using g-buffer
             design_full = self.FG_net(input_full[:, 3:, :, :])  # only G-buffer
+        else:
+            # KPCN denoisor
+            design_full = self.FG_net(input_full[:, 3:, :, :])
+
+        # design_full_np = other_tools.from_torch_tensor_img_to_full_res_numpy(design_full)
+        # exr.write("./veach-ajar_feature.exr", design_full_np[0])
 
         # W = W.view((b * hw), size_Pkernel)
+        ones_full = torch.ones((b, 1, h_full, w_full), dtype=input_full.dtype, layout=input_full.layout,
+                               device=input_full.device)
 
         "PADDING INPUT FOR PREVENTING COLOR INFO. LOSSES"
         size_pad = length_p_kernel // 2
@@ -196,6 +228,7 @@ class WLS_net_FG_v1(nn.Module):
 
         input_full = nn.functional.pad(input_full, pad, mode='constant')
         design_full = nn.functional.pad(design_full, pad, mode='constant')
+        ones_full = nn.functional.pad(ones_full, pad, mode='constant')
 
         "CHUNK WISE REGRESSION"
         for w_start in np.arange(0, w_full, chunk_size):
@@ -220,12 +253,13 @@ class WLS_net_FG_v1(nn.Module):
                 # 이미 padding이 앞서 진행됨.
                 input = input_full[:, :, h_start_p:h_end_p, w_start_p:w_end_p]  # 지금 padding 된 상태
                 design = design_full[:, :, h_start_p:h_end_p, w_start_p:w_end_p]
+                ones = ones_full[:, :, h_start_p:h_end_p, w_start_p:w_end_p]
 
                 # padding 진행 안됨.
                 W = W_full[:, :, h_start:h_end, w_start:w_end]
 
                 "KERNEL REGRESSION"
-                out = self.kernel_regression(input, W, design=design, test_mode=True)
+                out = self.kernel_regression(ones, input, W, design=design, test_mode=True)
 
                 if self.loss_type == 1 or self.loss_type == 2:
                     out_full[:, :, :, h_start:h_end, w_start:w_end] = \
@@ -238,7 +272,8 @@ class WLS_net_FG_v1(nn.Module):
         else:
             return out_full
 
-    def kernel_regression(self, input, W, design=None, test_mode=True):
+
+    def kernel_regression(self, ones, input, W, design=None, test_mode=True):
         """
             input : img form buffer (b, ch_in, h, w)
             W : img form weight (b, size_Pkernel, h, w)
@@ -249,7 +284,10 @@ class WLS_net_FG_v1(nn.Module):
         b = input.size(0)
         ch_in = input.size(1)  # 10 (color + g_buffer)
 
-        ch_de = 1 + 3 + 2 * self.reg_order
+        if self.FG_mode == 0 or self.FG_mode == 1:
+            ch_de = 1 + 3 + 2 * self.reg_order
+        else:
+            ch_de = 1 + 7 + 2 * self.reg_order
 
         h, w = input.size(2), input.size(3)
         hw = h * w
@@ -258,15 +296,17 @@ class WLS_net_FG_v1(nn.Module):
         size_Pkernel = length_p_kernel ** 2
 
         "UNFOLDING FOR DESIGN MATRIX"
-        ones = torch.ones((b, 1, h, w), dtype=input.dtype, layout=input.layout, device=input.device)
+        # ones = torch.ones((b, 1, h, w), dtype=input.dtype, layout=input.layout, device=input.device)
 
         # n 1+7 h w
         # design = torch.cat((ones, input[:, 3:, :, :]), dim=1)  # input의 3ch 이후에는 모두 g-buffer라 가정.
         if design == None:
             if self.FG_mode == 0:
-                design = torch.cat((ones, self.FG_net(input)), dim=1)
+                design = torch.cat((ones, self.FG_net(input)), dim=1)  # 1 + 3
             elif self.FG_mode == 1:
-                design = torch.cat((ones, self.FG_net(input[:, 3:, :, :])), dim=1)
+                design = torch.cat((ones, self.FG_net(input[:, 3:, :, :])), dim=1) # 1 + 3
+            else:
+                design = torch.cat((ones, self.FG_net(input[:, 3:, :, :])), dim=1)  # 1 + 7
         else:
             design = torch.cat((ones, design), dim=1)
 
@@ -294,9 +334,16 @@ class WLS_net_FG_v1(nn.Module):
                               device=input.device)
 
         "MAKE XT AND DOMAIN"
-        design = design.permute(0, 2, 1).contiguous().view(b * hw, 1 + 3, size_Pkernel)
+        if self.FG_mode == 0 or self.FG_mode == 1:
+            design = design.permute(0, 2, 1).contiguous().view(b * hw, 1 + 3, size_Pkernel)
+        else:
+            design = design.permute(0, 2, 1).contiguous().view(b * hw, 1 + 7, size_Pkernel)
+
         if self.norm_in_window:
-            design = self.norm_in_prediction_window_for_FG(design)
+            if self.FG_mode == 0 or self.FG_mode == 1:
+                design = self.norm_in_prediction_window_for_FG(design)
+            else:
+                design = self.norm_in_prediction_window(design)
 
         # b * hw, ch_de, size_Pkernel
         if self.reg_order > 0:
@@ -393,6 +440,42 @@ class WLS_net_FG_v1(nn.Module):
 
         return x_unfolded
 
+    def norm_in_prediction_window(self, design):
+        """
+                input : design (b*hw_d, ch_de, P_kernel)
+                output : normalized design in terms of a prediction window
+                feature #1 : 꼭 input 형태에 유의를 할 필요가 있음.
+        """
+        def min_max_norm(input):
+            # input : b*hw_d, ch_de, P_kernel
+            a = input.dim()
+            # min max
+            if a == 3:
+                min_input = torch.min(torch.min(input, 1, True)[0], 2, True)[0]
+                max_input = torch.max(torch.max(input, 1, True)[0], 2, True)[0]
+            else:
+                min_input = torch.min(input, 1, True)[0]
+                max_input = torch.max(input, 1, True)[0]
+
+            return (input - min_input) / (max_input - min_input + 0.001)
+
+        # bhw_d, inter_tile, t, ch_de = design.size()
+
+        # albedo
+        design[:, 1:4, :] = min_max_norm(design[:, 1:4, :])
+
+        # depth
+        design[:, 4, :] = min_max_norm(design[:, 4, :])
+
+        # normal
+        design[:, 5:8, :] = min_max_norm(design[:, 5:8, :])
+
+        # # grid
+        # ch_grid = ch_de - 8
+        # for i in range(ch_grid):
+        #     design[:, :, :, 8 + i] = min_max_norm(design[:, :, :, 8 + i])
+
+        return design
 
     def norm_in_prediction_window_for_FG(self, design):
         """

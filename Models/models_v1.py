@@ -92,7 +92,8 @@ class WLS_net_v1(nn.Module):
                                                      padding=(kernel_size - 1) // 2)
 
         # self.layers_for_weights_feed.weight.data.fill_(0.0)
-        # self.layers_for_weights_feed.bias.data.fill_(0.0)
+        # self.layers_for_weights_feed.bias.data.fill_(1.0)
+
         # self.b, self.ch_in, self.ch_de, self.h, self.w = [0, 0, 0, 0, 0]
 
 
@@ -119,7 +120,8 @@ class WLS_net_v1(nn.Module):
         W = F.softmax(W, dim=1)
 
         "KERNEL REGRESSION"
-        out = self.kernel_regression(input, W, test_mode=False)
+        ones = torch.ones((b, 1, h, w), dtype=input.dtype, layout=input.layout, device=input.device)
+        out = self.kernel_regression(ones, input, W, test_mode=False)
 
         if only_img_out == True:
             return self.make_full_res_out(out, b, h, w, length_p_kernel, W)
@@ -168,6 +170,10 @@ class WLS_net_v1(nn.Module):
         size_pad = length_p_kernel // 2
         pad = (size_pad, size_pad, size_pad, size_pad)
         input_full = nn.functional.pad(input_full, pad, mode='constant')
+
+        ones_full = torch.ones((b, 1, h_full, w_full), dtype=input_full.dtype, layout=input_full.layout,
+                               device=input_full.device)
+        ones_full = nn.functional.pad(ones_full, pad, mode='constant')
         
         "CHUNK WISE REGRESSION"
         for w_start in np.arange(0, w_full, chunk_size):
@@ -191,12 +197,13 @@ class WLS_net_v1(nn.Module):
                 "CROP INPUT, REF, AND W"
                 # 이미 padding이 앞서 진행됨.
                 input = input_full[:, :, h_start_p:h_end_p, w_start_p:w_end_p]  # 지금 padding 된 상태
+                ones = ones_full[:, :, h_start_p:h_end_p, w_start_p:w_end_p]
 
                 # padding 진행 안됨.
                 W = W_full[:, :, h_start:h_end, w_start:w_end]
 
                 "KERNEL REGRESSION"
-                out = self.kernel_regression(input, W, test_mode=True)
+                out = self.kernel_regression(ones, input, W, test_mode=True)
 
                 if self.loss_type == 1 or self.loss_type == 2:
                     out_full[:, :, :, h_start:h_end, w_start:w_end] =\
@@ -210,7 +217,7 @@ class WLS_net_v1(nn.Module):
             return out_full
 
 
-    def kernel_regression(self, input, W, test_mode=True):
+    def kernel_regression(self, ones, input, W, test_mode=True):
         """
             input : img form buffer (b, ch_in, h, w)
             W : img form weight (b, size_Pkernel, h, w)
@@ -228,7 +235,9 @@ class WLS_net_v1(nn.Module):
         size_Pkernel = length_p_kernel ** 2
 
         "UNFOLDING FOR DESIGN MATRIX"
-        ones = torch.ones((b, 1, h, w), dtype=input.dtype, layout=input.layout, device=input.device)
+
+        # ones = torch.ones((b, 1, h, w), dtype=input.dtype, layout=input.layout, device=input.device)
+
         # n 1+7 h w
         design = torch.cat((ones, input[:, 3:, :, :]), dim=1)  # input의 3ch 이후에는 모두 g-buffer라 가정.
         design = self.unfold_and_padding(design)  # b, 8 * size_Pkernel, hw_d
@@ -260,8 +269,26 @@ class WLS_net_v1(nn.Module):
         "MAKE XT AND DOMAIN"
         design = design.permute(0, 2, 1).contiguous().view(b * hw, 1 + ch_in - 3, size_Pkernel)
 
+
+
         if self.norm_in_window:
             design = self.norm_in_prediction_window(design)
+
+        # depth 빼기
+        design = torch.cat((design[:, :4, :], design[:, 5:, :]), dim=1)
+        ch_de -= 1
+
+        # depth + normal 빼기
+        # design = design[:, :4, :]
+        # ch_de -= 4
+
+        # depth + albedo 빼기
+        # design = torch.cat((design[:, 0, :].unsqueeze(1), design[:, 5:, :]), dim=1)
+        # ch_de -= 4
+
+        # design = design[:, 0, :].unsqueeze(1)
+        # ch_de -= 7
+
 
         # b * hw, ch_de, size_Pkernel
         if self.reg_order > 0:

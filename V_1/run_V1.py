@@ -12,7 +12,7 @@ params_default = {
 
     # test 용도
     'trained_model_TEST': False,  # test mode
-    'trained_model_folder_pth': "./results/210411_WLS_net_FG_v1_epoch_100/04_11_15_49_15",  # ./results/210407_testtest_6/04_07_15_09_02
+    'trained_model_folder_pth': "F:/DH/history/4.09/210412_WLS_net_FG_v1(col_g-buffer)_norm_epoch_1000/04_12_11_03_05",  # ./results/210407_testtest_6/04_07_15_09_02
     'trained_parameter_name': "latest_parameter",
 
     'trained_model_RETRAIN': False,
@@ -27,7 +27,7 @@ params_default = {
 
     # 4. Image and batch size & iterations
     'batch_size': 6,  # 32  배치사이즈가 지나치게 크게 되면 자동으로 잘라준다.
-    'epochs': 100,
+    'epochs': 1000,
     'patch_size': 100,  # 200
     'multi_crop': False,
 
@@ -52,15 +52,16 @@ params_default = {
     # 9. Index setting for run and network functions
     'run_index': 0,
     'network_name': "WLS_net_FG_v1",  # WLS_net_v1, KPCN_v1, WLS_net_FG_v1
+    'network_index': 1,
 
     # 10. Saving folder setting
-    'saving_folder_name': "210412_test",
+    'saving_folder_name': "210415_WLS_net_FG_v1(KPCN)_epoch_1000",
     # 210326_model_stack_v2_epoch_2k_W_half_nonorm_smape
     # 210331_model_stack_v2_patch_size_100_mini_unfolded_no_order
 
     'saving_sub_folder_name': None,  # if None, it will replaced to time, day string
 
-    'saving_file_name': "210412_test",
+    'saving_file_name': "210412_WLS_net_FG_v1(g-buffer)_norm_epoch_1000",
 
 }
 
@@ -141,3 +142,28 @@ def data_load_and_run(params=None, gpu_id=1):
     """####################  TRAIN OR TEST MODE ####################"""
     ttv.train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input_buffer, test_ref_buffer,
                             TEST_MODE=params['trained_model_TEST'], RE_TRAIN=params['trained_model_RETRAIN'])
+
+
+
+
+def one_exr_load_and_test(test_params, input_pth, ref_pth, BUFFER, gpu_id=1):
+    root_saving_pth = "./results"
+    if not os.path.exists(root_saving_pth):
+        os.mkdir(root_saving_pth)
+
+    # make the new saving folder as intended
+    saving_folder_pth = root_saving_pth + "/" + test_params["saving_folder_name"]
+    if not os.path.exists(saving_folder_pth):
+        os.mkdir(saving_folder_pth)
+
+    if test_params["saving_sub_folder_name"] == None:
+        test_params["saving_sub_folder_name"] = saving_folder_pth + "/" + str(datetime.today().strftime("%m_%d_%H_%M_%S"))
+    else:
+        test_params["saving_sub_folder_name"] = saving_folder_pth + "/" + test_params["saving_sub_folder_name"]
+
+    if not os.path.exists(test_params["saving_sub_folder_name"]):
+        os.mkdir(test_params["saving_sub_folder_name"])
+
+    input_buffer, ref_buffer = load.load_normalize_one_exr_for_test(input_pth, ref_pth, BUFFER, load_dtype="FLOAT")
+
+    ttv.test_for_one_exr(test_params, input_buffer, ref_buffer)

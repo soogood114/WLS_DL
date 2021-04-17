@@ -32,7 +32,7 @@ def normalize_depth_1ch_v1(depth):
     output = np.zeros_like(depth)
     for i in range(n_data):
         max_depth = np.max(depth[i])
-        output[i] = depth[i] / max_depth
+        output[i] = depth[i] / (max_depth + 0.00000001)
     return output
 
 def normalize_normal(normal):

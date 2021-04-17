@@ -99,7 +99,6 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         end_epochs = 0
 
 
-
     """LOSS SETTING"""
     if params['loss_type'] == 'l2':
         loss_fn = torch.nn.MSELoss()
@@ -130,10 +129,19 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         shutil.copy("../Models/models_KPCN.py", saving_code_folder_name + "/saved_models_KPCN.py")
 
     elif params['network_name'] == "WLS_net_FG_v1":
-        mynet = models_v2.WLS_net_FG_v1(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21,
-                                        epsilon=0.0001,
-                                        pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True,
-                                        is_resnet=True, FG_mode=0).train().to(device)
+        if params['network_index'] == 0:
+            print("WLS_net_FG_v1 and FG")
+            mynet = models_v2.WLS_net_FG_v1(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21,
+                                            epsilon=0.0001,
+                                            pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True,
+                                            is_resnet=True, FG_mode=1).train().to(device)
+        else:
+            # g-buffer denoisor
+            print("WLS_net_FG_v1 and KPCN for b-buffer denoising")
+            mynet = models_v2.WLS_net_FG_v1(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21,
+                                            epsilon=0.0001,
+                                            pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=False,
+                                            is_resnet=True, FG_mode=2).train().to(device)
         shutil.copy("../Models/models_v2.py", saving_code_folder_name + "/saved_models_v2.py")
 
 
@@ -261,6 +269,9 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
 
         image_index = 0
 
+        f.write(str(params["saving_folder_name"]))
+        f.write("\n")
+
         for data in test_loader:
             x = data['input'].cuda().to(torch.float32)
             y = data['target'].cuda().to(torch.float32)
@@ -307,5 +318,118 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
 
             image_index += 1
         f.close()
+
+
+
+def test_for_one_exr(params, input_buffer, ref_buffer):
+    """
+    임시로 test 함수를 만듦.
+    나중에는 ttv에 이런 기능을 넣어 통합할 예정.
+    이름대로 하나의 exr buffer를 갖고 test를 하는 함수임.
+
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cpu")
+
+    """SETTING DATA LOAD FOR TEST"""
+    transform_img = transforms.Compose([FT.ToTensor(multi_crop=False)])  # targeting for image
+
+    # test data loader
+    test_data = dataset.Supervised_dataset(input_buffer, ref_buffer,
+                                           train=False, transform=transform_img)
+    test_loader = torch.utils.data.DataLoader(test_data, batch_size=1, shuffle=False)
+
+
+
+    """LOSS SETTING"""
+    if params['loss_type'] == 'l2':
+        loss_fn = torch.nn.MSELoss()
+    elif params['loss_type'] == 'l1':
+        loss_fn = torch.nn.L1Loss()
+    elif params['loss_type'] == 'custom_loss_v1':
+        loss_fn = my_loss.my_custom_loss_v1(params['loss_weights'], params['SMAP_loss'], params['reinhard_loss'])
+    else:
+        print("unknown loss!")
+        return
+
+    if params['network_name'] == "WLS_net_v1":
+        mynet = models_v1.WLS_net_v1(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21,
+                                     epsilon=0.001,
+                                     pad_mode=0, loss_type=0, kernel_accum=True, norm_in_window=False,
+                                     is_resnet=True).train().to(device)
+
+    elif params['network_name'] == "KPCN_v1":
+        mynet = models_KPCN.KPCN_v1(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21,
+                                  no_soft_max=False,
+                                  pad_mode=0, is_resnet=True).train().to(device)
+
+    parameter_pth = params['trained_model_folder_pth'] + "/parameters/" + params['trained_parameter_name']
+    saved_torch_para = torch.load(parameter_pth)
+
+    # mynet.load_state_dict(saved_torch_para['model_state_dict'])
+    mynet = saved_torch_para['model']
+
+    """VALIDATE NETWORK"""
+    with torch.no_grad():
+        mynet.eval()
+
+        out_folder_name = params["saving_sub_folder_name"] + "/test_imgs"
+        if not os.path.exists(out_folder_name):
+            os.mkdir(out_folder_name)
+
+        rmse_saving_pth = out_folder_name + "/rmse_list.txt"
+        f = open(rmse_saving_pth, 'w')
+
+        image_index = 0
+
+        f.write(str(params["saving_folder_name"]))
+        f.write("\n")
+
+        for data in test_loader:
+            x = data['input'].to(device).to(torch.float32)
+            y = data['target'].to(device).to(torch.float32)
+
+            if params['network_name'] == "WLS_net_v1":
+                # y_pred = mynet(x, y, True)
+                y_pred = mynet.test_chunkwise(x, chunk_size=200)
+
+            elif params['network_name'] == "KPCN_v1":
+                y_pred = mynet(x, y, only_img_out=True)
+                # y_pred = mynet.test_chunkwise(x, chunk_size=200)
+
+            elif params['network_name'] == "WLS_net_FG_v1":
+                # y_pred = mynet(x, y, True)
+                y_pred = mynet.test_chunkwise(x, chunk_size=200)
+
+            "FROM TORCH TENSOR TO NUMPY TENSOR"
+            x_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(x[:, :3, :, :])
+            y_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(y)
+            y_pred_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(y_pred)
+
+            x_np_saving = x_np_saving[0]
+            y_np_saving = y_np_saving[0]
+            y_pred_np_saving = y_pred_np_saving[0]
+
+            x_np_saving = norm.denormalization_signed_log(x_np_saving)
+            y_np_saving = norm.denormalization_signed_log(y_np_saving)
+            y_pred_np_saving = norm.denormalization_signed_log(y_pred_np_saving)
+
+            rmse = other_tools.calcRelMSE(y_pred_np_saving, y_np_saving)
+            rmse_str = str(image_index) + " image relMSE : " + str(rmse)
+            f.write(rmse_str)
+            f.write("\n")
+            print(rmse_str)
+
+            "SAVING THE RESULTING IMAGES"
+            exr.write(out_folder_name + "/" + params['saving_file_name'] + "_" + str(image_index) + "_input.exr",
+                      x_np_saving)
+            exr.write(out_folder_name + "/" + params['saving_file_name'] + "_" + str(image_index) + "_gt.exr",
+                      y_np_saving)
+            exr.write(out_folder_name + "/" + params['saving_file_name'] + "_" + str(image_index) + "_result.exr",
+                      y_pred_np_saving)
+
+            image_index += 1
+        f.close()
+
 
 
