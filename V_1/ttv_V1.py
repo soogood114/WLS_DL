@@ -144,13 +144,6 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
                                             is_resnet=True, FG_mode=2).train().to(device)
         shutil.copy("../Models/models_v2.py", saving_code_folder_name + "/saved_models_v2.py")
 
-    elif params['network_name'] == "WLS_net_FG_v2":
-        print("WLS_net_FG_v2")
-        # FG mode > 0 ---> on, FG mode < 0 ---> off
-        mynet = models_v2.WLS_net_FG_v2(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21, epsilon=0.00001,
-                 pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=-1,
-                 soft_max_W=False, resi_train=False, g_buff_list=[False, False, False]).train().to(device)
-
 
     # re train or test mode
     if RE_TRAIN or TEST_MODE:
@@ -193,7 +186,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
                 elif params['network_name'] == "KPCN_v1":
                     y_pred, current_loss = mynet(x, y, only_img_out=False)
 
-                elif params['network_name'] == "WLS_net_FG_v1" or params['network_name'] == "WLS_net_FG_v2":
+                elif params['network_name'] == "WLS_net_FG_v1":
                     y_pred, current_loss = mynet(x, y, False, full_res_out)
                     # current_loss = loss_fn(y_pred, y)
 
@@ -291,7 +284,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
                 y_pred = mynet(x, y, only_img_out=True)
                 # y_pred = mynet.test_chunkwise(x, chunk_size=200)
 
-            elif params['network_name'] == "WLS_net_FG_v1" or params['network_name'] == "WLS_net_FG_v2":
+            elif params['network_name'] == "WLS_net_FG_v1":
                 # y_pred = mynet(x, y, True)
                 y_pred = mynet.test_chunkwise(x, chunk_size=200)
 

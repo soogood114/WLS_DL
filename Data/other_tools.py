@@ -90,53 +90,6 @@ def get_nfor_img_and_get_relmse(in_pth):
         exr.write(out_pth + "/" + str(input_spp_list[i]) + "spp_nfor.exr", input_nfor)
 
 
-def tensor_buffer_decomp():
-    "텅스텐에서 나온 buffer를 칼라, albedo, normal 별로 decomp를 하는 코드"
-
-
-    root_pth = "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/tungsten_test_scenes/"
-    scenes = ["bathroom2", "car", "kitchen", "living-room", "living-room-3", "veach-ajar", "curly-hair",
-              "staircase2", "glass-of-water", "teapot-full"]
-    spp = [32, 100, 256, 512, 1024, 2048, 4096]
-
-    out_pth = "E:/Work_space/CG_MRF_reconstruction_code/AdvMCDenoise/data/"
-
-    for i in range(len(scenes)):
-        # for j in range(len(spp)):
-        #     file_pth = root_pth + "/" + scenes[i] + "/out_" + str(spp[j]) + "spp.exr"
-        #     buffer = exr.read_all(file_pth)
-        #
-        #     diffuse = buffer['diffuse']
-        #     specular = buffer['specular']
-        #     albedo = buffer['albedo']
-        #     depth = buffer['depth']
-        #     normal = buffer['normal']
-        #
-        #     saving_pth = out_pth + scenes[i] + "_" + str(spp[j]) + "spp_"
-        #
-        #     exr.write(saving_pth + "diffuse.exr", diffuse)
-        #     exr.write(saving_pth + "specular.exr", specular)
-        #     exr.write(saving_pth + "albedo.exr", albedo)
-        #     exr.write(saving_pth + "depth.exr", depth)
-        #     exr.write(saving_pth + "normal.exr", normal)
-
-        file_pth = root_pth + "/" + scenes[i] + "/out_" + "64k" + "spp.exr"
-        buffer = exr.read_all(file_pth)
-
-        diffuse = buffer['diffuse']
-        specular = buffer['specular']
-        albedo = buffer['albedo']
-        depth = buffer['depth']
-        normal = buffer['normal']
-
-        saving_pth = out_pth + scenes[i] + "_" + "64k" + "spp_"
-
-        exr.write(saving_pth + "diffuse.exr", diffuse)
-        exr.write(saving_pth + "specular.exr", specular)
-        exr.write(saving_pth + "albedo.exr", albedo)
-        exr.write(saving_pth + "depth.exr", depth)
-        exr.write(saving_pth + "normal.exr", normal)
-
 
 # if __name__ == "__main__":
 #     "임시"
@@ -156,12 +109,6 @@ def tensor_buffer_decomp():
     # bathroom2, car, kitchen, living-room, living-room-3, veach-ajar
     # curly-hair, staircase2, glass-of-water, teapot-full
     # get_nfor_img_and_get_relmse("E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/tungsten_test_scenes/glass-of-water")
-
-    # tensor_buffer_decomp()
-
-
-
-
 
 
 
