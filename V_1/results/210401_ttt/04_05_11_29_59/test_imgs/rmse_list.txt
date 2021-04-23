@@ -1,0 +1,16 @@
+0 image relMSE : inf
+1 image relMSE : inf
+2 image relMSE : inf
+3 image relMSE : inf
+4 image relMSE : inf
+5 image relMSE : inf
+6 image relMSE : inf
+7 image relMSE : inf
+8 image relMSE : inf
+9 image relMSE : inf
+10 image relMSE : inf
+11 image relMSE : inf
+12 image relMSE : inf
+13 image relMSE : inf
+14 image relMSE : inf
+15 image relMSE : inf

@@ -11,7 +11,7 @@ def multi_imgs_test_from_one_image_test():
         # 입력
         # bathroom2, car, kitchen, living-room, living-room-3, veach-ajar,
         # curly-hair, staircase2, glass-of-water, teapot-full
-        scene_name = "teapot-full"
+        scene_name = "living-room"
 
         input_file_name = "out_32spp.exr"
         input_spp_list = [32, 100, 256, 512, 1024, 2048, 4096]
@@ -39,20 +39,20 @@ def multi_imgs_test_from_one_image_test():
         }
         ""
         # 입력
-        test_params['trained_model_folder_pth'] = "F:/DH/history/4.09/210412_WLS_net_FG_v1(col_g-buffer)_norm_epoch_1000/04_12_11_03_05"
+        test_params['trained_model_folder_pth'] = "F:/DH/history/4.09/210417_WLS_net_FG_v1(denoised_g-buf)_norm_epoch_1000/04_17_12_16_32"
 
         # 입력
         test_params['grid_order'] = 1
 
         # 입력
-        test_params['saving_folder_name'] = scene_name + "_" + "WLS_net_FG_v1(col_g-buffer)_norm_epoch_1000"
+        test_params['saving_folder_name'] = scene_name + "_" + "WLS_net_FG_v1(denoised_g-buf)_norm_epoch_1000"
 
         for i in range(len(input_spp_list)):
                 input_file_name = "out_" + str(input_spp_list[i]) + "spp.exr"
                 test_params['saving_sub_folder_name'] = scene_name + "_" + str(input_spp_list[i])
 
                 # 입력
-                test_params['saving_file_name'] = scene_name + "_" + str(input_spp_list[i]) + "_" + "WLS_net_FG_v1(col_g-buffer)_norm_epoch_1000"
+                test_params['saving_file_name'] = scene_name + "_" + str(input_spp_list[i]) + "_" + "WLS_net_FG_v1(denoised_g-buf)_norm_epoch_1000"
 
 
                 input_pth = base_pth + "/" + scene_name + "/" + input_file_name
@@ -64,8 +64,8 @@ def multi_imgs_test_from_one_image_test():
 
 if __name__ == "__main__":
         "train or test"
-        # print("train or test start !!")
-        # run.data_load_and_run(params=None, gpu_id=0)
+        print("train or test start !!")
+        run.data_load_and_run(params=None, gpu_id=0)
 
 
         "re train"
@@ -109,4 +109,4 @@ if __name__ == "__main__":
         # test_params['saving_folder_name'] = "ONE_IMG_TEST_" + test_params['saving_folder_name']
         # run.one_exr_load_and_test(test_params, input_pth, ref_pth, buffer_list, gpu_id=0)
 
-        multi_imgs_test_from_one_image_test()
+        # multi_imgs_test_from_one_image_test()

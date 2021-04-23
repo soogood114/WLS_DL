@@ -1,0 +1,16 @@
+0 image relMSE : 0.11317255
+1 image relMSE : 0.039024908
+2 image relMSE : 0.0039080996
+3 image relMSE : 0.008543896
+4 image relMSE : 0.009738289
+5 image relMSE : 0.03461829
+6 image relMSE : 0.0003878047
+7 image relMSE : 0.0007639172
+8 image relMSE : 0.003972214
+9 image relMSE : 0.12939984
+10 image relMSE : 0.06563163
+11 image relMSE : 0.03525608
+12 image relMSE : 0.012780301
+13 image relMSE : 0.012165677
+14 image relMSE : 0.0059456583
+15 image relMSE : 0.005429599

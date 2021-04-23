@@ -27,7 +27,7 @@ params_default = {
 
     # 4. Image and batch size & iterations
     'batch_size': 6,  # 32  배치사이즈가 지나치게 크게 되면 자동으로 잘라준다.
-    'epochs': 1000,
+    'epochs': 10,
     'patch_size': 100,  # 200
     'multi_crop': False,
 
@@ -45,23 +45,23 @@ params_default = {
     'lr': 0.0001,  # default : 0.0001
 
     # 8. Saving period
-    "para_saving_epoch": 50,  # 100
+    "para_saving_epoch": 50,  # 50
     "loss_saving_epoch": 10,  # 이건 지금 쓰이고 있질 않음. epoch마다 저장
-    "val_patches_saving_epoch": 50,  # 100
+    "val_patches_saving_epoch": 50,  # 50
 
     # 9. Index setting for run and network functions
     'run_index': 0,
-    'network_name': "WLS_net_FG_v1",  # WLS_net_v1, KPCN_v1, WLS_net_FG_v1
-    'network_index': 1,
+    'network_name': "WLS_net_FG_v2",  # WLS_net_v1, KPCN_v1, WLS_net_FG_v1
+    'network_index': 0,
 
     # 10. Saving folder setting
-    'saving_folder_name': "210415_WLS_net_FG_v1(KPCN)_epoch_1000",
+    'saving_folder_name': "210422_tttt",
     # 210326_model_stack_v2_epoch_2k_W_half_nonorm_smape
     # 210331_model_stack_v2_patch_size_100_mini_unfolded_no_order
 
     'saving_sub_folder_name': None,  # if None, it will replaced to time, day string
 
-    'saving_file_name': "210412_WLS_net_FG_v1(g-buffer)_norm_epoch_1000",
+    'saving_file_name': "210422_tttt",
 
 }
 
