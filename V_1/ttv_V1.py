@@ -29,7 +29,7 @@ import Models.models_KPCN as models_KPCN
 
 
 def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input_buffer, test_ref_buffer,
-                        TEST_MODE, RE_TRAIN):
+                        TEST_MODE, RE_TRAIN, IMG_BY_IMG):
     """
     입력 구성: params, input_buffer = norm. of [color, g-buffer], ref_buffer = norm. of color
     순서: initial setting -> data transformation function setting -> data load -> train and test
@@ -39,7 +39,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
     """INITIAL SETTING"""
     # GPU index setting
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    _, H, W, _ = test_input_buffer.shape
+    # _, H, W, _ = test_input_buffer.shape
 
     # channel index
     ch_col_start = 0
@@ -64,17 +64,47 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
     if not TEST_MODE:
 
         """SETTING DATA LOAD AND CORRESPONDING TRANSFORMS FOR TRAINING"""
-        # define transform op
-        transform = transforms.Compose([
-            FT.RandomCrop(params['patch_size']),
-            FT.RandomFlip(multi_crop=params['multi_crop']),
-            FT.PermuteColor(multi_crop=params['multi_crop']),
-            FT.ToTensor(multi_crop=False)
-        ])
-        # train data loader
-        train_data = dataset.Supervised_dataset(train_input_buffer, train_ref_buffer,
-                                                train=True, transform=transform)
-        train_loader = torch.utils.data.DataLoader(train_data, batch_size=params['batch_size'], shuffle=True)
+        if IMG_BY_IMG:
+            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+            if params['img_by_img_type'] == "h5":
+                # h5py
+                transform = transforms.Compose([
+                    FT.IBI_RandomCrop_np(params['patch_size'], buffer_list),
+                    FT.IBI_RandomFlip_np(params['multi_crop'], buffer_list),
+                    FT.IBI_PermuteColor_np(params['multi_crop'], buffer_list),
+                    FT.IBI_Normalize_Concat_np_v1(params['multi_crop'], buffer_list),
+                    FT.ToTensor(params['multi_crop'])
+                ])
+                train_data = dataset.Supervised_dataset_img_by_img_np(train_input_buffer, train_ref_buffer,
+                                                                          buffer_list,
+                                                                          train=True, transform=transform)
+            else:
+                # torch data
+                transform = transforms.Compose([
+                    FT.IBI_RandomCrop_tensor(params['patch_size'], buffer_list),
+                    FT.IBI_RandomFlip_tensor(params['multi_crop'], buffer_list),
+                    FT.IBI_PermuteColor_tensor(params['multi_crop'], buffer_list),
+                    FT.IBI_Normalize_Concat_tensor_v1(params['multi_crop'], buffer_list)
+                ])
+                train_data = dataset.Supervised_dataset_img_by_img_tensor(train_input_buffer, train_ref_buffer,
+                                                                          buffer_list,
+                                                                          train=True, transform=transform)
+
+            train_loader = torch.utils.data.DataLoader(train_data, batch_size=params['batch_size'], shuffle=True,
+                                                       num_workers=1) # params['batch_size']
+        else:
+            # define transform op
+            transform = transforms.Compose([
+                FT.RandomCrop(params['patch_size']),
+                FT.RandomFlip(multi_crop=params['multi_crop']),
+                FT.PermuteColor(multi_crop=params['multi_crop']),
+                FT.ToTensor(multi_crop=False)
+            ])
+            # train data loader
+            train_data = dataset.Supervised_dataset(train_input_buffer, train_ref_buffer,
+                                                    train=True, transform=transform)
+            train_loader = torch.utils.data.DataLoader(train_data, batch_size=params['batch_size'], shuffle=True)
 
         """SAVING THE TENSORBOARD"""
         out_tensorboard_folder_name = params["saving_sub_folder_name"] + "/tensorboards"
@@ -148,8 +178,8 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         print("WLS_net_FG_v2")
         # FG mode > 0 ---> on, FG mode < 0 ---> off
         mynet = models_v2.WLS_net_FG_v2(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21, epsilon=0.00001,
-                 pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=-1,
-                 soft_max_W=False, resi_train=False, g_buff_list=[False, False, False]).train().to(device)
+                 pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=1,
+                 soft_max_W=True, resi_train=False, g_buff_list=[True, True, True]).train().to(device)
 
 
     # re train or test mode
@@ -256,12 +286,30 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
 
 
     """SETTING DATA LOAD FOR TEST"""
-    transform_img = transforms.Compose([FT.ToTensor(multi_crop=False)])  # targeting for image
+    if IMG_BY_IMG:
+        if params['img_by_img_type'] == "h5":
+            # h5py
+            transform_img = transforms.Compose([FT.IBI_Normalize_Concat_np_v1(multi_crop=False),
+                                                FT.ToTensor(False)])  # targeting for image
+            # test data loader
+            test_data = dataset.Supervised_dataset_img_by_img_np(test_input_buffer, test_ref_buffer, buffer_list,
+                                                   train=False, transform=transform_img)
+        else:
+            # torch data
+            transform_img = transforms.Compose(
+                [FT.IBI_Normalize_Concat_tensor_v1(multi_crop=False)])  # targeting for image
+            # test data loader
+            test_data = dataset.Supervised_dataset_img_by_img_tensor(test_input_buffer, test_ref_buffer, buffer_list,
+                                                                     train=False, transform=transform_img)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=1, shuffle=False)
 
-    # test data loader
-    test_data = dataset.Supervised_dataset(test_input_buffer, test_ref_buffer,
-                                           train=False, transform=transform_img)
-    test_loader = torch.utils.data.DataLoader(test_data, batch_size=1, shuffle=False)
+    else:
+        transform_img = transforms.Compose([FT.ToTensor(multi_crop=False)])  # targeting for image
+
+        # test data loader
+        test_data = dataset.Supervised_dataset(test_input_buffer, test_ref_buffer,
+                                               train=False, transform=transform_img)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=1, shuffle=False)
 
     """VALIDATE NETWORK"""
     with torch.no_grad():
@@ -280,8 +328,8 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         f.write("\n")
 
         for data in test_loader:
-            x = data['input'].cuda().to(torch.float32)
-            y = data['target'].cuda().to(torch.float32)
+            x = data['input'].cuda()  #.to(torch.float32)
+            y = data['target'].cuda()  #.to(torch.float32)
 
             if params['network_name'] == "WLS_net_v1":
                 # y_pred = mynet(x, y, True)

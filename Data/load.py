@@ -3,6 +3,7 @@ import numpy as np
 import glob
 from random import shuffle
 import h5py
+import torch
 
 import Data.exr as exr
 import Data.manipulate as mani
@@ -786,6 +787,184 @@ def get_npy_tungsten_and_normalize_v1(DIR, BUFFER, color_merge=True):
 
 
 
+"Adv MC GAN 전용"
+def get_npy_tungsten_for_AdvMC(DIR, color_type="diffuse"):
+    """
+    input : pth, mini_batch
+    output : 저장된 npy 파일
+    특징 1 : AdvMC에 특화된 데이터 load
+    특징 2 : 일단은 diffuse, specular, albedo, depth, normal 각각 나오게 됨.
+    특징 3 : nomalization도 안 함.
+    """
+    # pth = E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/npy/1. train/
+
+    "채널 크기"
+
+    if color_type == "diffuse":
+        input_dif_or_spe = np.load(DIR + "input_diffuse" + ".npy")
+        ref_dif_or_spe = np.load(DIR + "ref_diffuse" + ".npy")
+    else:
+        input_dif_or_spe = np.load(DIR + "input_specular" + ".npy")
+        ref_dif_or_spe = np.load(DIR + "ref_specular" + ".npy")
+
+    input_albedo = np.load(DIR + "input_albedo" + ".npy")
+    input_depth = np.load(DIR + "input_depth" + ".npy")
+    input_normal = np.load(DIR + "input_normal" + ".npy")
+
+
+    return input_dif_or_spe, input_albedo, input_depth, input_normal, ref_dif_or_spe
+
+
+
+def make_DB_from_tungsten(DIR, SCENE, BUFFER, OUT_PTH="tmp",
+                            input_endswith="00128spp.exr", ref_endswith="08192spp.exr", mini_batch=False):
+    """
+    input : Dir = scene 폴더들이 있는 상위 폴더 위치, SCENE = 가져올 scene, BUFFER = 특정 feature 버퍼 이름
+    output : torch.data 또는 h5py로 각 feature들이 나오로독 함.
+    특징 1 : 위에서 언급을 했듯이 기존의 이름을 유지를 하고 데이터 형태를 바꿈.
+    특징 2 : torch.data나 h5py로 바꿀 수 있게 함.
+    특징 3 : 하나 하나의 이미지 그리고 피처를 갖고 저장이 되도록 함. 전체 이미지를 묶어서 하질 않음.
+    특징 4 : FLOAT 32로 저장
+
+    h5py 특징 : h, w, ch의 형태로 저장이 되고 'data'라고 tag가 달려 있음.
+    torch.data 특징 : torch에 맞게 ch, h, w의 형태로 저장이 되고 마찬가지로 'data'라는 tag가 있음.
+
+    """
+
+    # DIR = 'D:/Tunsten_deep_learning_denoising_dataset/deep_learning_denoising/renderings'
+    # SCENE = ['bathroom2', 'car2', 'classroom', 'house', 'room2', 'room3', 'spaceship', 'staircase']
+    # BUFFER = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+    "path 불러오기"
+    # OUT_PTH = "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/torch_data/"
+    input_all_features = []  # [scene, files]
+    ref_all_feature = []
+
+    total_num_imgs = 0
+
+    for i in range(len(SCENE)):
+        # ALL_SCENES.append(os.path.join(DIR, SCENE[i]))
+
+        files = os.listdir(os.path.join(DIR, SCENE[i]))
+
+        input_all_features_one_scene = [file for file in files if file.endswith(input_endswith)]
+        ref_all_features_one_scene = [file for file in files if file.endswith(ref_endswith)]
+
+        if not mini_batch:
+            input_all_features.append(input_all_features_one_scene)
+            ref_all_feature.append(ref_all_features_one_scene)
+        else:
+            input_all_features.append(input_all_features_one_scene[:5])
+            ref_all_feature.append(ref_all_features_one_scene[:5])
+        total_num_imgs += len(input_all_features_one_scene)
+
+
+    "exr load"
+    for s in range(len(input_all_features)):
+
+        # scene 마다의 폴더 만들기
+        scene_folder_pth = os.path.join(OUT_PTH, SCENE[s])
+        if not os.path.exists(scene_folder_pth):
+            os.mkdir(scene_folder_pth)
+
+        for f in range(len(input_all_features[s])):
+            print(f)
+
+            "input : network input"
+            input_file_name = input_all_features[s][f]
+            one_input = exr.read_all(os.path.join(DIR, SCENE[s], input_file_name))
+            out_pth_for_one_input = os.path.join(scene_folder_pth, input_file_name.split(".")[0])
+
+            ref_file_name = ref_all_feature[s][f]
+            one_ref = exr.read_all(os.path.join(DIR, SCENE[s], ref_file_name))
+            out_pth_for_one_ref = os.path.join(scene_folder_pth, ref_file_name.split(".")[0])
+
+
+            for b in range(len(BUFFER)):
+                one_input_one_feature = one_input[BUFFER[b]]
+                out_pth_for_input_feature = out_pth_for_one_input + "_" + BUFFER[b]
+
+                one_ref_one_feature = one_ref[BUFFER[b]]
+                out_pth_for_ref_feature = out_pth_for_one_ref + "_" + BUFFER[b]
+
+                "saving h5py"
+                # input
+                hf = h5py.File(out_pth_for_input_feature + ".h5", 'w')
+                hf.create_dataset('data', data=one_input_one_feature)
+                hf.close()
+
+                # ref
+                hf = h5py.File(out_pth_for_ref_feature + ".h5", 'w')
+                hf.create_dataset('data', data=one_ref_one_feature)
+                hf.close()
+
+                "saving torch.data"
+                # input
+                # one_input_one_feature_torch = one_input_one_feature.transpose((2, 0, 1))
+                # one_input_one_feature_torch = torch.from_numpy(one_input_one_feature_torch)
+                # torch.save({'data': one_input_one_feature_torch}, out_pth_for_input_feature)
+
+                # ref
+                # one_ref_one_feature_torch = one_ref_one_feature.transpose((2, 0, 1))
+                # one_ref_one_feature_torch = torch.from_numpy(one_ref_one_feature_torch)
+                # torch.save({'data': one_ref_one_feature_torch}, out_pth_for_ref_feature)
+
+                aa=1
+
+
+
+def get_all_pth_from_tungsten_torch_data(DIR, SCENE, BUFFER, input_spp="00128spp", ref_spp="08192spp", mini_batch=False,
+                                         img_by_img_type=None):
+    """
+    input : Dir = scene 폴더들이 있는 상위 폴더 위치. 그 안에는 torch.data가 있음.
+    output : input_buffer_pth, ref_buffer_pth (torch data에 해당하는 path들).
+    특징 1 : dict 형태로 feature 마다의 path 들을 내주게 됨.
+
+    torch.data 특징 : torch에 맞게 ch, h, w의 형태로 저장이 되고 마찬가지로 'data'라는 tag가 있음.
+    output dict 특징 : {"diffuse" : diffuse pths..., "specular" : specular pths...., ..}
+
+    ! 문제 발견 !
+
+    """
+
+    input_buffer_dict = {}
+    ref_buffer_dict = {}
+
+    for i in range(len(BUFFER)):
+
+        input_one_feature_list = []
+        ref_one_feature_list = []
+
+        for j in range(len(SCENE)):
+            files = os.listdir(os.path.join(DIR, SCENE[j]))
+
+            if img_by_img_type == "h5":
+                input_endswith = input_spp + "_" + BUFFER[i] + ".h5"
+                ref_endswith = ref_spp + "_" + BUFFER[i] + ".h5"
+            else:
+                input_endswith = input_spp + "_" + BUFFER[i]
+                ref_endswith = ref_spp + "_" + BUFFER[i]
+
+            input_all_features_one_scene = [os.path.join(DIR, SCENE[j], file) for file in files if file.endswith(input_endswith)]
+            ref_all_features_one_scene = [os.path.join(DIR, SCENE[j], file) for file in files if file.endswith(ref_endswith)]
+
+            # input_one_feature_list.append(input_all_features_one_scene)
+            # ref_one_feature_list.append(ref_all_features_one_scene)
+
+            if not mini_batch:
+                input_one_feature_list += input_all_features_one_scene
+                ref_one_feature_list += ref_all_features_one_scene
+            else:
+                input_one_feature_list += input_all_features_one_scene[:2]
+                ref_one_feature_list += ref_all_features_one_scene[:2]
+
+        input_buffer_dict[BUFFER[i]] = input_one_feature_list
+        ref_buffer_dict[BUFFER[i]] = ref_one_feature_list
+
+    return input_buffer_dict, ref_buffer_dict
+
+
+
 
 # if __name__ == "__main__":
         # load_exrs_from_tungsten('D:/Tunsten_deep_learning_denoising_dataset/deep_learning_denoising/renderings',
@@ -816,10 +995,46 @@ def get_npy_tungsten_and_normalize_v1(DIR, BUFFER, color_merge=True):
         #     buffer_mini = np.load(mini_pth + "/" + b + ".npy")
         #     np.save(saving_pth + "/" + b + ".npy", np.concatenate((buffer_test, buffer_mini), axis=0))
 
-
-
-
         #
         # get_npy_tungsten_and_normalize_v1("E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/npy/1. train/",
         #                                   ['diffuse', 'specular', 'albedo', 'depth', 'normal'])
 
+
+
+        # for train
+        # make_DB_from_tungsten('D:/Tunsten_deep_learning_denoising_dataset/deep_learning_denoising/renderings',
+        #                         ['bathroom2', 'car2', 'classroom', 'house', 'room2', 'room3', 'spaceship', 'staircase'],
+        #                         ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance', 'specularVariance',
+        #                          'albedoVariance', 'depthVariance', 'normalVariance'],
+        #                       #  "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/torch_data/1. train/",
+        #                        "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/h5py_data/1. train/",
+        #                         input_endswith="00128spp.exr", ref_endswith="08192spp.exr", mini_batch=False)
+
+        # for test
+        # make_DB_from_tungsten('E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/tungsten_test_scenes',
+        #                       ['bathroom2', 'car', 'kitchen', 'living-room', 'living-room-3', 'veach-ajar', 'curly-hair', 'staircase2',
+        #                        'glass-of-water', 'teapot-full'],
+        #                       ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance',
+        #                        'specularVariance',
+        #                        'albedoVariance', 'depthVariance', 'normalVariance'],
+        #                       # "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/torch_data/2. test/",
+        #                       "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/h5py_data/2. test/",
+        #                       input_endswith="100spp.exr", ref_endswith="64kspp.exr")
+
+
+        # train
+        # get_all_pth_from_tungsten_torch_data("E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/torch_data/1. train/",
+        #                                      ['bathroom2', 'car2', 'classroom', 'house', 'room2', 'room3', 'spaceship', 'staircase'],
+        #                                      ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance',
+        #                                       'specularVariance', 'albedoVariance', 'depthVariance', 'normalVariance'],
+        #                                      input_spp="00128spp", ref_spp="08192spp", mini_batch=True
+        #                                      )
+
+        # test
+        # get_all_pth_from_tungsten_torch_data(
+        #     "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/torch_data/2. test/",
+        #     ['bathroom2', 'car', 'kitchen', 'living-room', 'living-room-3', 'veach-ajar', 'curly-hair', 'staircase2', 'glass-of-water', 'teapot-full'],
+        #     ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance',
+        #      'specularVariance', 'albedoVariance', 'depthVariance', 'normalVariance'],
+        #     input_spp="100spp", ref_spp="64kspp"
+        #     )

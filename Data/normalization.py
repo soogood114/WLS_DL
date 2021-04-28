@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pickle
 import Data.exr as exr
+import torch
 
 """*******************************************************************************"""
 "normalization.py에 대한 정보"
@@ -141,3 +142,21 @@ def normalize_GT_v1(GT):
 
 def normalize_GT_img_v1(GT):
     GT[:, :, :, :3] = normalization_signed_log(GT[:, :, :, :3])
+
+
+"""*******************************************************************************"""
+"""                           IMAGE BY IMAGE TRANSFORM                            """
+"""*******************************************************************************"""
+def normalization_signed_log_tensor(data):
+    """
+    특징 : log + torch.tensor
+    """
+    return torch.sign(data) * torch.log(torch.abs(data) + 1)
+
+
+def denormalization_signed_log_tensor(data):
+    """
+    특징 : De log + torch.tensor
+    """
+    return torch.sign(data) * (torch.exp(torch.abs(data)) - 1)
+
