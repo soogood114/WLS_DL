@@ -112,36 +112,65 @@ def data_load_and_run(params=None, gpu_id=1):
         json.dump(params, fp)
 
     """####################  GET & NORMALIZE INPUT, DESIGN, GT ####################"""
-    dataset_dirs = "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/npy/"
+    print("THIS TRAINING IS DONE BY TORCH DATA (IMG BY IMG) !")
 
-    if params["mini_batch"]:
-        train_dirs = dataset_dirs + "3. mini_batch/"
+    dataset_dirs = "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/"
+
+    # gan은 편의상 h5로 고정
+    params['img_by_img_type'] = "h5"
+
+    if params['img_by_img_type'] == "h5":
+        dataset_dirs += "h5py_data/"
     else:
-        train_dirs = dataset_dirs + "1. train/"
+        dataset_dirs += "torch_data/"
+
+    train_dirs = dataset_dirs + "1. train/"
+    train_scenes = ['bathroom2', 'car2', 'classroom', 'house', 'room2', 'room3', 'spaceship', 'staircase']
 
     test_dirs = dataset_dirs + "2. test/"
+    test_scenes = ['bathroom2', 'car', 'kitchen', 'living-room', 'living-room-3', 'veach-ajar',
+                   'curly-hair', 'staircase2', 'glass-of-water', 'teapot-full']
 
-    tr_i_diff_or_spec, tr_i_al, tr_i_de, tr_i_nor, tr_r_diff_or_spec = load.get_npy_tungsten_for_AdvMC(train_dirs, params["color_type"])
+    buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance',
+                   'specularVariance', 'albedoVariance', 'depthVariance', 'normalVariance']
 
-    te_i_diff_or_spec, te_i_al, te_i_de, te_i_nor, te_r_diff_or_spec = load.get_npy_tungsten_for_AdvMC(test_dirs, params["color_type"])
+    train_input_path, train_ref_path = load.get_all_pth_from_tungsten_torch_data(train_dirs, train_scenes,
+                                                                                 buffer_list,
+                                                                                 "00128spp", "08192spp",
+                                                                                 params['mini_batch'],
+                                                                                 params['img_by_img_type']
+                                                                                 )
 
+    test_input_path, test_ref_path = load.get_all_pth_from_tungsten_torch_data(test_dirs, test_scenes,
+                                                                               buffer_list,
+                                                                               "100spp", "64kspp",
+                                                                               False,
+                                                                               params['img_by_img_type']
+                                                                               )
 
     """####################  opt for models of AdvMC ####################"""
     # parser = argparse.ArgumentParser()
     opt = option.parse(
         "E:/Work_space/CG_MRF_reconstruction_code/AdvMCDenoise/codes/scripts/train/train_seperate_denoiser_diffuse.json",
-        is_train= not params['trained_model_TEST'])
+        is_train=not params['trained_model_TEST'])
 
     """####################  TRAIN OR TEST MODE ####################"""
-    if params["color_type"] == "diffuse":
-        ttv.train_test_diffuse_model_v_gan(params, opt,
-                                           tr_i_diff_or_spec, tr_i_al, tr_i_de, tr_i_nor, tr_r_diff_or_spec,
-                                           te_i_diff_or_spec, te_i_al, te_i_de, te_i_nor, te_r_diff_or_spec,
-                                           TEST_MODE=params['trained_model_TEST'],
-                                           RE_TRAIN=params['trained_model_RETRAIN'])
-    else:
-        ttv.train_test_specular_model_v_gan(params, opt,
-                                           tr_i_diff_or_spec, tr_i_al, tr_i_de, tr_i_nor, tr_r_diff_or_spec,
-                                           te_i_diff_or_spec, te_i_al, te_i_de, te_i_nor, te_r_diff_or_spec,
-                                           TEST_MODE=params['trained_model_TEST'],
-                                           RE_TRAIN=params['trained_model_RETRAIN'])
+    ttv.train_test_diffuse_model_v_gan(params, opt,
+                                       train_input_path, train_ref_path,
+                                       test_input_path, test_ref_path,
+                                       TEST_MODE=params['trained_model_TEST'],
+                                       RE_TRAIN=params['trained_model_RETRAIN'])
+
+
+    # if params["color_type"] == "diffuse":
+    #     ttv.train_test_diffuse_model_v_gan(params, opt,
+    #                                        train_input_path, train_ref_path,
+    #                                        test_input_path, test_ref_path,
+    #                                        TEST_MODE=params['trained_model_TEST'],
+    #                                        RE_TRAIN=params['trained_model_RETRAIN'])
+    # else:
+    #     ttv.train_test_specular_model_v_gan(params, opt,
+    #                                        tr_i_diff_or_spec, tr_i_al, tr_i_de, tr_i_nor, tr_r_diff_or_spec,
+    #                                        te_i_diff_or_spec, te_i_al, te_i_de, te_i_nor, te_r_diff_or_spec,
+    #                                        TEST_MODE=params['trained_model_TEST'],
+    #                                        RE_TRAIN=params['trained_model_RETRAIN'])

@@ -92,7 +92,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
                                                                           train=True, transform=transform)
 
             train_loader = torch.utils.data.DataLoader(train_data, batch_size=params['batch_size'], shuffle=True,
-                                                       num_workers=1) # params['batch_size']
+                                                       num_workers=params['num_workers']) # params['batch_size']
         else:
             # define transform op
             transform = transforms.Compose([
@@ -178,7 +178,7 @@ def train_test_model_v1(params, train_input_buffer, train_ref_buffer, test_input
         print("WLS_net_FG_v2")
         # FG mode > 0 ---> on, FG mode < 0 ---> off
         mynet = models_v2.WLS_net_FG_v2(params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21, epsilon=0.00001,
-                 pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=1,
+                 pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=-1,
                  soft_max_W=True, resi_train=False, g_buff_list=[True, True, True]).train().to(device)
 
 

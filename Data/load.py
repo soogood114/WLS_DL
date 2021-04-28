@@ -951,6 +951,9 @@ def get_all_pth_from_tungsten_torch_data(DIR, SCENE, BUFFER, input_spp="00128spp
             # input_one_feature_list.append(input_all_features_one_scene)
             # ref_one_feature_list.append(ref_all_features_one_scene)
 
+            input_all_features_one_scene.sort()
+            ref_all_features_one_scene.sort()
+
             if not mini_batch:
                 input_one_feature_list += input_all_features_one_scene
                 ref_one_feature_list += ref_all_features_one_scene

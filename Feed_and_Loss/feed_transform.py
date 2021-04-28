@@ -606,45 +606,6 @@ class IBI_RandomCrop_tensor(object):
 
         return {'input_dict':  input_dict, 'target_dict': target_dict}
 
-class IBI_RandomCrop_np(object):
-    """
-    Args:
-        IBI : image by image의 줄임말
-        특징 : 모든 sample은 dict 형태로 존재를 함. 그리고 indexing을 위해서 buffer list도 있음.
-
-        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
-    """
-
-    def __init__(self, output_size, buffer_list=None):
-        assert isinstance(output_size, (int, tuple))
-        if isinstance(output_size, int):
-            self.output_size = (output_size, output_size)
-        else:
-            assert len(output_size) == 2
-            self.output_size = output_size
-
-        if buffer_list is None:
-            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
-
-        self.buffer_list = buffer_list
-
-    def __call__(self, sample):
-        input_dict, target_dict = sample['input_dict'], sample['target_dict']
-
-        h, w = input_dict[self.buffer_list[0]].shape[:2]
-        new_h, new_w = self.output_size
-
-        top = np.random.randint(0, h - new_h)
-        left = np.random.randint(0, w - new_w)
-
-        for buffer in self.buffer_list:
-            input_dict[buffer] = input_dict[buffer][top: top + new_h, left: left + new_w]
-            target_dict[buffer] = target_dict[buffer][top: top + new_h, left: left + new_w]
-
-        return {'input_dict':  input_dict, 'target_dict': target_dict}
-
-
-
 
 class IBI_RandomFlip_tensor(object):
     """
@@ -691,51 +652,6 @@ class IBI_RandomFlip_tensor(object):
         return {'input_dict':  input_dict, 'target_dict': target_dict}
 
 
-class IBI_RandomFlip_np(object):
-    """
-    Args:
-        horizontal과 vertical 방향으로 각각 0.5의 확률로 패치를 돌린다.
-
-        IBI : image by image의 줄임말
-        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
-    """
-
-    def __init__(self, multi_crop=False, buffer_list=None):
-        self.multi_crop = multi_crop
-
-        if buffer_list is None:
-            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
-
-        self.buffer_list = buffer_list
-
-
-    def __call__(self, sample):
-        input_dict, target_dict = sample['input_dict'], sample['target_dict']
-        # H, W, C
-
-        prob_vertical_flip = np.random.randint(0, 100)
-        prob_horizontal_flip = np.random.randint(0, 100)
-
-        if not self.multi_crop:
-            ver_axis_index = 0
-            hor_axis_index = 1
-        else:
-            ver_axis_index = 1
-            hor_axis_index = 2
-
-        if prob_vertical_flip > 50:
-            for buffer in self.buffer_list:
-                input_dict[buffer] = np.flip(input_dict[buffer], axis=ver_axis_index).copy()
-                target_dict[buffer] = np.flip(target_dict[buffer], axis=ver_axis_index).copy()
-
-        if prob_horizontal_flip > 50:
-            for buffer in self.buffer_list:
-                input_dict[buffer] = np.flip(input_dict[buffer], axis=hor_axis_index).copy()
-                target_dict[buffer] = np.flip(target_dict[buffer], axis=hor_axis_index).copy()
-
-        return {'input_dict':  input_dict, 'target_dict': target_dict}
-
-
 
 class IBI_PermuteColor_tensor(object):
     """
@@ -762,69 +678,30 @@ class IBI_PermuteColor_tensor(object):
         if not self.multi_crop:
             if "diffuse" in self.buffer_list:
                 input_dict["diffuse"] = input_dict["diffuse"][permute_3ch, :, :]
+                target_dict["diffuse"] = target_dict["diffuse"][permute_3ch, :, :]
 
             if "specular" in self.buffer_list:
                 input_dict["specular"] = input_dict["specular"][permute_3ch, :, :]
+                target_dict["specular"] = target_dict["specular"][permute_3ch, :, :]
 
             if "albedo" in self.buffer_list:
                 input_dict["albedo"] = input_dict["albedo"][permute_3ch, :, :]
+                target_dict["albedo"] = target_dict["albedo"][permute_3ch, :, :]
 
         else:
             if "diffuse" in self.buffer_list:
                 input_dict["diffuse"] = input_dict["diffuse"][:, permute_3ch, :, :]
+                target_dict["diffuse"] = target_dict["diffuse"][:, permute_3ch, :, :]
 
             if "specular" in self.buffer_list:
                 input_dict["specular"] = input_dict["specular"][:, permute_3ch, :, :]
+                target_dict["specular"] = target_dict["specular"][:, permute_3ch, :, :]
 
             if "albedo" in self.buffer_list:
                 input_dict["albedo"] = input_dict["albedo"][:, permute_3ch, :, :]
+                target_dict["albedo"] = target_dict["albedo"][:, permute_3ch, :, :]
 
         return {'input_dict':  input_dict, 'target_dict': target_dict}
-
-class IBI_PermuteColor_np(object):
-    """
-    Args:
-        IBI : image by image의 줄임말
-        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
-    """
-
-    def __init__(self, multi_crop=False, buffer_list=None):
-
-        self.multi_crop = multi_crop
-
-        if buffer_list is None:
-            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
-
-        self.buffer_list = buffer_list
-
-    def __call__(self, sample):
-        input_dict, target_dict = sample['input_dict'], sample['target_dict']
-        # H, W, C
-
-        permute_3ch = np.random.permutation(3)
-
-        if not self.multi_crop:
-            if "diffuse" in self.buffer_list:
-                input_dict["diffuse"] = input_dict["diffuse"][:, :, permute_3ch]
-
-            if "specular" in self.buffer_list:
-                input_dict["specular"] = input_dict["specular"][:, :, permute_3ch]
-
-            if "albedo" in self.buffer_list:
-                input_dict["albedo"] = input_dict["albedo"][:, :, permute_3ch]
-
-        else:
-            if "diffuse" in self.buffer_list:
-                input_dict["diffuse"] = input_dict["diffuse"][:, :, :, permute_3ch]
-
-            if "specular" in self.buffer_list:
-                input_dict["specular"] = input_dict["specular"][:, :, :, permute_3ch]
-
-            if "albedo" in self.buffer_list:
-                input_dict["albedo"] = input_dict["albedo"][:, :, :, permute_3ch]
-
-        return {'input_dict':  input_dict, 'target_dict': target_dict}
-
 
 
 class IBI_Normalize_Concat_tensor_v1(object):
@@ -883,6 +760,141 @@ class IBI_Normalize_Concat_tensor_v1(object):
         return {'input': input, 'target': target}
 
 
+
+class IBI_RandomCrop_np(object):
+    """
+    Args:
+        IBI : image by image의 줄임말
+        특징 : 모든 sample은 dict 형태로 존재를 함. 그리고 indexing을 위해서 buffer list도 있음.
+
+        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
+    """
+
+    def __init__(self, output_size, buffer_list=None):
+        assert isinstance(output_size, (int, tuple))
+        if isinstance(output_size, int):
+            self.output_size = (output_size, output_size)
+        else:
+            assert len(output_size) == 2
+            self.output_size = output_size
+
+        if buffer_list is None:
+            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+        self.buffer_list = buffer_list
+
+    def __call__(self, sample):
+        input_dict, target_dict = sample['input_dict'], sample['target_dict']
+
+        h, w = input_dict[self.buffer_list[0]].shape[:2]
+        new_h, new_w = self.output_size
+
+        top = np.random.randint(0, h - new_h)
+        left = np.random.randint(0, w - new_w)
+
+        for buffer in self.buffer_list:
+            input_dict[buffer] = input_dict[buffer][top: top + new_h, left: left + new_w]
+            target_dict[buffer] = target_dict[buffer][top: top + new_h, left: left + new_w]
+
+        return {'input_dict':  input_dict, 'target_dict': target_dict}
+
+
+class IBI_RandomFlip_np(object):
+    """
+    Args:
+        horizontal과 vertical 방향으로 각각 0.5의 확률로 패치를 돌린다.
+
+        IBI : image by image의 줄임말
+        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
+    """
+
+    def __init__(self, multi_crop=False, buffer_list=None):
+        self.multi_crop = multi_crop
+
+        if buffer_list is None:
+            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+        self.buffer_list = buffer_list
+
+
+    def __call__(self, sample):
+        input_dict, target_dict = sample['input_dict'], sample['target_dict']
+        # H, W, C
+
+        prob_vertical_flip = np.random.randint(0, 100)
+        prob_horizontal_flip = np.random.randint(0, 100)
+
+        if not self.multi_crop:
+            ver_axis_index = 0
+            hor_axis_index = 1
+        else:
+            ver_axis_index = 1
+            hor_axis_index = 2
+
+        if prob_vertical_flip > 50:
+            for buffer in self.buffer_list:
+                input_dict[buffer] = np.flip(input_dict[buffer], axis=ver_axis_index).copy()
+                target_dict[buffer] = np.flip(target_dict[buffer], axis=ver_axis_index).copy()
+
+        if prob_horizontal_flip > 50:
+            for buffer in self.buffer_list:
+                input_dict[buffer] = np.flip(input_dict[buffer], axis=hor_axis_index).copy()
+                target_dict[buffer] = np.flip(target_dict[buffer], axis=hor_axis_index).copy()
+
+        return {'input_dict':  input_dict, 'target_dict': target_dict}
+
+
+class IBI_PermuteColor_np(object):
+    """
+    Args:
+        IBI : image by image의 줄임말
+        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
+    """
+
+    def __init__(self, multi_crop=False, buffer_list=None):
+
+        self.multi_crop = multi_crop
+
+        if buffer_list is None:
+            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+        self.buffer_list = buffer_list
+
+    def __call__(self, sample):
+        input_dict, target_dict = sample['input_dict'], sample['target_dict']
+        # H, W, C
+
+        permute_3ch = np.random.permutation(3)
+
+        if not self.multi_crop:
+            if "diffuse" in self.buffer_list:
+                input_dict["diffuse"] = input_dict["diffuse"][:, :, permute_3ch]
+                target_dict["diffuse"] = target_dict["diffuse"][:, :, permute_3ch]
+
+            if "specular" in self.buffer_list:
+                input_dict["specular"] = input_dict["specular"][:, :, permute_3ch]
+                target_dict["specular"] = target_dict["specular"][:, :, permute_3ch]
+
+            if "albedo" in self.buffer_list:
+                input_dict["albedo"] = input_dict["albedo"][:, :, permute_3ch]
+                target_dict["albedo"] = target_dict["albedo"][:, :, permute_3ch]
+
+        else:
+            if "diffuse" in self.buffer_list:
+                input_dict["diffuse"] = input_dict["diffuse"][:, :, :, permute_3ch]
+                target_dict["diffuse"] = target_dict["diffuse"][:, :, :, permute_3ch]
+
+            if "specular" in self.buffer_list:
+                input_dict["specular"] = input_dict["specular"][:, :, :, permute_3ch]
+                target_dict["specular"] = target_dict["specular"][:, :, :, permute_3ch]
+
+            if "albedo" in self.buffer_list:
+                input_dict["albedo"] = input_dict["albedo"][:, :, :, permute_3ch]
+                target_dict["albedo"] = target_dict["albedo"][:, :, :, permute_3ch]
+
+        return {'input_dict':  input_dict, 'target_dict': target_dict}
+
+
 class IBI_Normalize_Concat_np_v1(object):
     """
     Args:
@@ -937,3 +949,97 @@ class IBI_Normalize_Concat_np_v1(object):
         target = target_color
 
         return {'input': input, 'target': target}
+
+
+
+class IBI_Normalize_Concat_ToTensor_np_v_gan(object):
+    """
+    Args:
+        IBI : image by image의 줄임말
+        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
+
+        v1의 특징
+        아주 단순히 AdvMC에 나온 형식의 buffer를 만들어 줌.
+    """
+
+    def __init__(self, multi_crop=False, buffer_list=None):
+        self.multi_crop = multi_crop
+
+        if buffer_list is None:
+            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+        self.buffer_list = buffer_list
+
+
+    def __call__(self, sample):
+        input_dict, target_dict = sample['input_dict'], sample['target_dict']
+        # H, W, C
+
+        input_diffuse, input_specular, input_features_d, input_features_s = self.normalize(input_dict)
+        target_diffuse, target_specular, target_features_d, target_features_s = self.normalize(target_dict)
+
+        input_color = norm.normalization_signed_log(input_dict["diffuse"] + input_dict["specular"])
+        target_color = norm.normalization_signed_log(target_dict["diffuse"] + target_dict["specular"])
+
+        y = target_color.shape[1]  # (1280 - img_GT.shape[1])//2 #800
+        x = target_color.shape[0]  # (1280 - img_GT.shape[0])//2
+
+        target_color = torch.from_numpy(np.ascontiguousarray(np.transpose(target_color, (2, 0, 1)))).float()
+        target_specular = torch.from_numpy(np.ascontiguousarray(np.transpose(target_specular, (2, 0, 1)))).float()
+        target_diffuse = torch.from_numpy(np.ascontiguousarray(np.transpose(target_diffuse, (2, 0, 1)))).float()
+
+        input_color = torch.from_numpy(np.ascontiguousarray(np.transpose(input_color, (2, 0, 1)))).float()
+        input_diffuse = torch.from_numpy(np.ascontiguousarray(np.transpose(input_diffuse, (2, 0, 1)))).float()
+        input_specular = torch.from_numpy(np.ascontiguousarray(np.transpose(input_specular, (2, 0, 1)))).float()
+
+        input_features_d = torch.from_numpy(np.ascontiguousarray(np.transpose(input_features_d, (2, 0, 1)))).float()
+        input_features_s = torch.from_numpy(np.ascontiguousarray(np.transpose(input_features_s, (2, 0, 1)))).float()
+
+        return {'NOISY': input_color,
+                "seg": input_features_d,
+
+                "seg2": input_features_s,
+
+                "diffuse_in": input_diffuse,
+                "specular_in": input_specular,
+                'GT': target_color,
+                "diffuse_ref": target_diffuse,
+                "specular_ref": target_specular,
+
+                "x_offset": x,
+                "y_offset": y
+                }
+
+
+    def normalize(self, buffer):
+
+        def LogTransform(data):
+            assert (np.sum(data < 0) == 0)
+            return np.log(data + 1.0)
+
+        diffuse = buffer['diffuse']
+        specular = buffer['specular']
+        texture = buffer['albedo']
+        depth = buffer['depth']
+        normal = buffer['normal']
+
+        diffuse[diffuse < 0.0] = 0.0
+        diffuse = diffuse / (texture + 0.00316)
+        diffuse = LogTransform(diffuse)
+        specular[specular < 0.0] = 0.0
+        specular = LogTransform(specular)
+        normal = np.nan_to_num(normal)
+
+        maxDepth = buffer['max_depth']
+        if maxDepth != 0:
+            depth /= maxDepth
+        else:
+            depth /= 0.000001
+
+        feautres_diff = np.concatenate((normal, depth, texture), axis=2)
+
+        normal2 = (normal + 1.0) * 0.5
+        normal2 = np.maximum(np.minimum(normal2, 1.0), 0.0)
+        feautres_spec = np.concatenate((normal2, depth, texture), axis=2)
+
+        return diffuse, specular, feautres_diff, feautres_spec

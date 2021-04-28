@@ -8,7 +8,7 @@ import V_1.ttv_V1 as ttv
 
 params_default = {
     # 1. Mode selection
-    "mini_batch": False,  # mini batch
+    "mini_batch": True,  # mini batch
 
     # test 용도
     'trained_model_TEST': False,  # test mode
@@ -25,6 +25,8 @@ params_default = {
     # 새로 추가 !!
     'img_by_img': True,
     'img_by_img_type': "torch",  # h5 : h5, torch : torch.data
+    'num_workers': 1,
+
 
     # 3. Design matrix
     "grid_order": 1,
@@ -59,13 +61,13 @@ params_default = {
     'network_index': 0,
 
     # 10. Saving folder setting
-    'saving_folder_name': "210427_tttt",
+    'saving_folder_name': "210428_tttt",
     # 210326_model_stack_v2_epoch_2k_W_half_nonorm_smape
     # 210331_model_stack_v2_patch_size_100_mini_unfolded_no_order
 
     'saving_sub_folder_name': None,  # if None, it will replaced to time, day string
 
-    'saving_file_name': "210427_tttt",
+    'saving_file_name': "210428_tttt",
 
 }
 
