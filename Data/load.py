@@ -887,6 +887,13 @@ def make_DB_from_tungsten(DIR, SCENE, BUFFER, OUT_PTH="tmp",
                 one_ref_one_feature = one_ref[BUFFER[b]]
                 out_pth_for_ref_feature = out_pth_for_one_ref + "_" + BUFFER[b]
 
+                if BUFFER[b] == "colorVariance" or BUFFER[b] == "albedoVariance" or BUFFER[b] == "normalVariance"\
+                        or "diffuseVariance" or "specularVariance":
+                    if one_input_one_feature.shape[2] == 3:
+                        one_input_one_feature = np.sum(one_input_one_feature, axis=2, keepdims=True) / 3.0
+                        one_ref_one_feature = np.sum(one_ref_one_feature, axis=2, keepdims=True) / 3.0
+
+
                 "saving h5py"
                 # input
                 hf = h5py.File(out_pth_for_input_feature + ".h5", 'w')
@@ -1017,9 +1024,9 @@ def get_all_pth_from_tungsten_torch_data(DIR, SCENE, BUFFER, input_spp="00128spp
         # make_DB_from_tungsten('E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/tungsten_test_scenes',
         #                       ['bathroom2', 'car', 'kitchen', 'living-room', 'living-room-3', 'veach-ajar', 'curly-hair', 'staircase2',
         #                        'glass-of-water', 'teapot-full'],
-        #                       ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance',
+        #                       ['diffuseVariance',
         #                        'specularVariance',
-        #                        'albedoVariance', 'depthVariance', 'normalVariance'],
+        #                        'albedoVariance', 'depthVariance', 'normalVariance', 'colorVariance'],
         #                       # "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/torch_data/2. test/",
         #                       "E:/Work_space/CG_MRF_reconstruction_code/Adaptive_PR_recons_project/DB/WLS_DL_DB/img_by_img/h5py_data/2. test/",
         #                       input_endswith="100spp.exr", ref_endswith="64kspp.exr")

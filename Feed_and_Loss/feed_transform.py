@@ -906,15 +906,25 @@ class IBI_Normalize_Concat_np_v1(object):
         그리고 tensor를 concat을 하는 것도 기존의 것과 동일하게 함.
         따라서, color merge는 기본적으로 들어가게 됨.
         그리고 diffse, specular, albedo, depth, normal 순으로 저장이 된 dict가 들어옴.
+
+        추가 !!!
+        network의 이름에 따라서 내주는 buffer를 다르게 하려고 함.
+        일단은 새로 만들게 되는 네트워크에 이름을 "net_name"에 넣어주면 그에 따른 buffer 또는 dict가 나오게 됨.
+
+        따라서, {'input': input, 'target': target} 또는 {'input': input_dict, 'target': target_dict}
+
     """
 
-    def __init__(self, multi_crop=False, buffer_list=None):
+    def __init__(self, multi_crop=False, buffer_list=None, net_name=None):
         self.multi_crop = multi_crop
 
         if buffer_list is None:
             buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
 
         self.buffer_list = buffer_list
+
+        self.net_name = net_name
+
 
 
     def __call__(self, sample):
@@ -949,6 +959,92 @@ class IBI_Normalize_Concat_np_v1(object):
         target = target_color
 
         return {'input': input, 'target': target}
+
+
+class IBI_Normalize_Concat_To_GPU_np_v_pipeline(object):
+    """
+    Args:
+        IBI : image by image의 줄임말
+        !! 주의 모든 이미지의 형태는 ch h w의 형태라는 것을 잊지 말아야 함.  !!
+
+        v1 pipeline의 특징
+            - pipeline에 맞게 변형
+            - {input, test}의 형태가 아니라 하나의 dict의 형태로 결과를 냄.
+            - WLS_net_Gde_FG_Pipeline_v1의 특징에 맞게 변형을 시킬 예정
+
+
+    """
+
+    def __init__(self, multi_crop=False, buffer_list=None, net_name=None):
+        self.multi_crop = multi_crop
+
+        if buffer_list is None:
+            buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal']
+
+        self.buffer_list = buffer_list
+
+        self.net_name = net_name
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+    def __call__(self, sample):
+        input_dict, target_dict = sample['input_dict'], sample['target_dict']
+        # H, W, C
+
+        # color merge and normalization
+        input_color = norm.normalization_signed_log(input_dict["diffuse"] + input_dict["specular"])
+        target_color = norm.normalization_signed_log(target_dict["diffuse"] + target_dict["specular"])
+
+        input_colorVar = norm.normalization_signed_log(input_dict["colorVariance"])
+
+
+        # albedo is already normalized [0, 1]
+        input_albedo = input_dict["albedo"]
+        target_albedo = target_dict["albedo"]
+
+        # depth normalization
+        if input_dict["max_depth"] == 0:
+            input_depth = input_dict["depth"] / (input_dict["max_depth"] + 0.0000001)
+            target_depth = target_dict["depth"] / (target_dict["max_depth"] + 0.0000001)
+        else:
+            input_depth = input_dict["depth"] / (input_dict["max_depth"])
+            target_depth = target_dict["depth"] / (target_dict["max_depth"])
+
+        # normal normalization
+        input_normal = (input_dict["normal"] + 1) / 2
+        target_normal = (target_dict["normal"] + 1) / 2
+
+        if not self.multi_crop:
+            in_g_buff_net = np.concatenate((input_albedo, input_depth, input_normal, input_dict["albedoVariance"],
+                                            input_dict["depthVariance"], input_dict["normalVariance"]), axis=2)
+            ref_g_buff_net = np.concatenate((target_albedo, target_depth, target_normal), axis=2)
+
+        else:
+            in_g_buff_net = np.concatenate((input_albedo, input_depth, input_normal, input_dict["albedoVariance"],
+                                            input_dict["depthVariance"], input_dict["normalVariance"]), axis=3)
+            ref_g_buff_net = np.concatenate((target_albedo, target_depth, target_normal), axis=3)
+
+        in_g_buff_net = np.nan_to_num(in_g_buff_net, nan=0.0, posinf=0.0)
+        ref_g_buff_net = np.nan_to_num(ref_g_buff_net, nan=0.0, posinf=0.0)
+
+        return {
+            'in_color': self.to_gpu_tensor(input_color),
+            'ref_color': self.to_gpu_tensor(target_color),
+            'in_colorVar': self.to_gpu_tensor(input_colorVar),
+            'in_g_buff_net': self.to_gpu_tensor(in_g_buff_net),
+            'ref_g_buff_net': self.to_gpu_tensor(ref_g_buff_net)
+                }
+
+    def to_gpu_tensor(self, input):
+
+        if not self.multi_crop:
+            input = input.transpose((2, 0, 1))
+        else:
+            input = input.transpose((0, 3, 1, 2))
+
+        return torch.from_numpy(input).to(self.device)
+
 
 
 

@@ -11,6 +11,7 @@ import Feed_and_Loss.loss as my_loss
 import Models.resnet as resnet
 import Models.NGPT_models as NGPT
 import Models.models_KPCN as KPCN
+import Models.models_others as models_others
 
 """ !!!!!!!!!!!!!!!!!!!!!!!!!! 주의  !!!!!!!!!!!!!!!!!!!!!!!!!!  """
 """ 
@@ -22,15 +23,21 @@ import Models.models_KPCN as KPCN
 """ !!!!!!!!!!!!!!!!!!!!!!!!!!  FG  !!!!!!!!!!!!!!!!!!!!!!!!!!  """
 
 class Design_feature_generator(nn.Module):
-    def __init__(self, params, ch_in, ch_out):
+    def __init__(self, params, ch_in, ch_out, type_index=1):
         super(Design_feature_generator, self).__init__()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.back_bone = NGPT.Back_bone_NGPT_v2(params, channels_in=ch_in, out_dim=ch_out).train().to(device)
+        if type_index == 1:
+            self.back_bone = NGPT.Back_bone_NGPT_v2(params, channels_in=ch_in, out_dim=ch_out).train().to(device)
+            print("FG_net setting : NGPT AE")
+        else:
+            self.back_bone = models_others.FG_pixtransform_v1(ch_in=ch_in, ch_out=ch_out).train().to(device)
+            print("FG_net setting : pix transform")
         # self.back_bone = NGPT.Back_bone_NGPT_v1(params, channels_in=ch_in, out_dim=ch_out).train().to(device)
 
     def forward(self, input):
         return torch.sigmoid(self.back_bone(input))  # [0, 1]
+
 
 class Design_feature_denoisor(nn.Module):
     def __init__(self, params, ch_in):
@@ -631,6 +638,11 @@ class WLS_net_FG_v2(nn.Module):
     - Soft max 등 다른 weight 후처리 함수 기용 가능. (sigmoid)
     - Sparse W도 여유가 되면 구현을 하려고 함. (우선 순위가 낮음)
 
+    - 추가
+    - variance 정보를 포함을 한다면 다음과 같은 input이 들어오게 됨. (!! 중요 !!)
+        input : color, g_buffer, g_buffer_var, color_var
+    - 중간에 FG net의 결과를 갖고 올 수 있도록 함.
+
     정리
     -
 
@@ -638,7 +650,7 @@ class WLS_net_FG_v2(nn.Module):
 
     def __init__(self, params, loss_fn, ch_in=10, kernel_size=3, n_layers=50, length_p_kernel=21, epsilon=0.001,
                  pad_mode=0, loss_type=0, kernel_accum=False, norm_in_window=False, is_resnet=True, FG_mode=0,
-                 soft_max_W=True, resi_train=True, g_buff_list=None):
+                 soft_max_W=True, resi_train=True, g_buff_list=None, use_g_buff_var=False, use_color_var=False):
         super(WLS_net_FG_v2, self).__init__()
 
         if g_buff_list is None:
@@ -673,16 +685,23 @@ class WLS_net_FG_v2(nn.Module):
         self.g_buff_list = g_buff_list  # albedo, depth, normal
         self.FG_mode = FG_mode
 
+        self.use_g_buff_var = use_g_buff_var
+        self.use_color_var = use_color_var
+
         self.ch_list_design = []
+        self.ch_list_design_var = []
         # albedo
         if self.g_buff_list[0]:
             self.ch_list_design += [3, 4, 5]
+            self.ch_list_design_var += [10]
         # depth
         if self.g_buff_list[1]:
             self.ch_list_design += [6]
+            self.ch_list_design_var += [11]
         # normal
         if self.g_buff_list[2]:
             self.ch_list_design += [7, 8, 9]
+            self.ch_list_design_var += [12]
 
         # auto trigger
         if self.resi_train:
@@ -693,14 +712,26 @@ class WLS_net_FG_v2(nn.Module):
             self.FG_mode = -1
             print("due to no use of g-buffer in design, there will be no use of FG")
 
+        if use_g_buff_var and use_color_var:
+            if ch_in != 14:
+                print("ERROR input channel is not right !")
+                return
+
         "FG"
         # FG mode가 -1이면 FG 없음.
-
+        self.FG_net_out = None
         if self.FG_mode >= 0:
-            self.FG_net = Design_feature_generator(self.params, ch_in=len(self.ch_list_design), ch_out=3)
+            if use_g_buff_var:
+                in_ch_FG_net = len(self.ch_list_design) + len(self.ch_list_design_var)
+            else:
+                in_ch_FG_net = len(self.ch_list_design)
+
+            self.FG_net = Design_feature_generator(self.params, ch_in=in_ch_FG_net, ch_out=3,
+                                                       type_index=self.FG_mode)
             # !! 나중에 ch_list_design에 맞게 Design_feature_denoisor도 바꿔주어야 함.
         else:
             print("WLS_net_FG_v2 has no FG net !")
+
 
         # grid
         if self.reg_order > 0:
@@ -930,7 +961,7 @@ class WLS_net_FG_v2(nn.Module):
         design = design.permute(0, 2, 1).contiguous().view(b * hw, ch_de, size_Pkernel)
 
         if self.norm_in_window:
-            if self.FG_mode == 0 or self.FG_mode == 1:
+            if self.FG_mode >= 0:  # if self.FG_mode == 0 or self.FG_mode == 1:
                 design = self.norm_in_prediction_window_for_FG(design)
             else:
                 design = self.norm_in_prediction_window(design)
@@ -993,7 +1024,12 @@ class WLS_net_FG_v2(nn.Module):
             design = ones
         else:
             if self.FG_mode >= 0:
-                design = torch.cat((ones, self.FG_net(input[:, self.ch_list_design, :, :])), dim=1)
+                if self.use_g_buff_var:
+                    self.FG_net_out = self.FG_net(input[:, self.ch_list_design + self.ch_list_design_var, :, :])
+                    design = torch.cat((ones, self.FG_net_out), dim=1)
+                else:
+                    self.FG_net_out = self.FG_net(input[:, self.ch_list_design, :, :])
+                    design = torch.cat((ones, self.FG_net_out), dim=1)
             else:
                 design = torch.cat((ones, input[:, self.ch_list_design, :, :]), dim=1)
 
@@ -1225,7 +1261,8 @@ class WLS_net_FG_v2(nn.Module):
         else:
             return out
 
-
+    def get_FG_net_out(self):
+        return self.FG_net_out
 
 
 

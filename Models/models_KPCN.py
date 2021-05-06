@@ -268,11 +268,14 @@ class KPCN_for_FG_v1(nn.Module):
     주요 기능
     - 꼭 albedo, depth, normal 순으로 저장된 7ch buffer가 들어가야 함
 
+    추가
+    - input에 var 정보도 같이 들어가 있을 때도 잘 동작하도록 함.
+
     정리
     """
 
     def __init__(self, params, ch_in=7, kernel_size=3, n_layers=8, length_p_kernel=5, no_soft_max=True,
-                 pad_mode=0, is_resnet=True):
+                 pad_mode=0, is_resnet=True, resi_train=False, use_W_var=False):
         super(KPCN_for_FG_v1, self).__init__()
 
         self.ch_in = ch_in
@@ -286,6 +289,8 @@ class KPCN_for_FG_v1(nn.Module):
         "new features"
         self.params = params
         self.no_soft_max = no_soft_max
+        self.resi_train = resi_train
+        self.use_W_var = use_W_var
 
         # setting of layers
         self.start_ch = ch_in
@@ -346,7 +351,7 @@ class KPCN_for_FG_v1(nn.Module):
         "INITIAL SETTING"
         b = input.size(0)
         h, w = input.size(2), input.size(3)
-        ch = self.ch_in
+        ch = 7  # self.ch_in
 
         "GET THE FEATURE FROM FEATURE NETWORK"
         feature = self.feature_layers_feed(input)
@@ -356,37 +361,48 @@ class KPCN_for_FG_v1(nn.Module):
         W_depth = self.W_depth_feed(feature)
         W_normal = self.W_normal_feed(feature)
 
-        if self.no_soft_max:
-            W_albedo = self.reg_W_without_soft_max(W_albedo)
-            W_depth = self.reg_W_without_soft_max(W_depth)
-            W_normal = self.reg_W_without_soft_max(W_normal)
-        else:
-            W_albedo = F.softmax(W_albedo, dim=1)
-            W_depth = F.softmax(W_depth, dim=1)
-            W_normal = F.softmax(W_normal, dim=1)
+        if self.use_W_var:
+            W_albedo = self.modify_W_from_var(W_albedo, input[:, 7, :, :].unsqueeze(1))
+            W_depth = self.modify_W_from_var(W_depth, input[:, 8, :, :].unsqueeze(1))
+            W_normal = self.modify_W_from_var(W_normal, input[:, 9, :, :].unsqueeze(1))
 
+        if self.resi_train:
+            W_albedo = torch.sigmoid(W_albedo)
+            W_depth = torch.sigmoid(W_depth)
+            W_normal = torch.sigmoid(W_normal)
+
+            W_albedo = W_albedo - torch.mean(W_albedo, 1).unsqueeze(1).expand_as(W_albedo)
+            W_depth = W_depth - torch.mean(W_depth, 1).unsqueeze(1).expand_as(W_depth)
+            W_normal = W_normal - torch.mean(W_normal, 1).unsqueeze(1).expand_as(W_normal)
+        else:
+            if self.no_soft_max:
+                W_albedo = self.reg_W_without_soft_max(W_albedo)
+                W_depth = self.reg_W_without_soft_max(W_depth)
+                W_normal = self.reg_W_without_soft_max(W_normal)
+            else:
+                W_albedo = F.softmax(W_albedo, dim=1)
+                W_depth = F.softmax(W_depth, dim=1)
+                W_normal = F.softmax(W_normal, dim=1)
 
         "KERNEL REGRESSION"
-        out = self.kernel_regression(input, W_albedo, W_depth, W_normal, test_mode=False)
+        out = self.kernel_regression(input[:, :7, :, :], W_albedo, W_depth, W_normal, test_mode=False)
         # out = out.view(b, h, w, 3).permute(0, 3, 1, 2)
 
-        return out.view(b, h, w, ch).permute(0, 3, 1, 2)
-
-
+        if self.resi_train:
+            return out.view(b, h, w, ch).permute(0, 3, 1, 2) + input[:, :7, :, :]
+        else:
+            return out.view(b, h, w, ch).permute(0, 3, 1, 2)
 
     def test_chunkwise(self, input_full, chunk_size=200):
         """
-        input : full res img form buffer
-        chunk : 이미지 block size
-        output : resulting image and loss
-        chunk 단위로 image를 쪼갤 수 있어 메모리 절감 효과
+        아직 구현이 안됨.
         """
         "INITIAL SETTING"
         self.pad_mode = -1  ## !! test mode에서는 꼭 해줘야함.
 
         b = input_full.size(0)
         h_full, w_full = input_full.size(2), input_full.size(3)
-        ch = self.ch_in
+        ch = 7  # self.ch_in
 
         length_p_kernel = int(self.length_p_kernel)  # length of inter tile
         size_p_kernel = length_p_kernel ** 2
@@ -440,7 +456,7 @@ class KPCN_for_FG_v1(nn.Module):
                 W = W_full[:, :, h_start:h_end, w_start:w_end]
 
                 "KERNEL REGRESSION"
-                out = self.kernel_regression(input, W, test_mode=True)
+                out = self.kernel_regression(input[:, :7, :, :], W, test_mode=True)
 
                 out_full[:, :, h_start:h_end, w_start:w_end] = out.view(b, h, w, 3).permute(0, 3, 1, 2)
 
@@ -536,8 +552,23 @@ class KPCN_for_FG_v1(nn.Module):
 
         return x_unfolded
 
-    def reg_W_without_soft_max(self, W, epsilon=0.000001):
-        "W에서 하나의 픽셀에 해당하는 가중치의 합을 1로 고정을 하는 함수"
-        " 특징 1: W안 요소들이 negative여도 상관 없음."
-        " W : b, size_Pkernel, h, w"
-        return W / (torch.sum(W, dim=1, keepdim=True) + epsilon)
+
+    def reg_W_without_soft_max(self, W):
+        "soft max 대신 sigmoid와 sum을 활용한 것"
+        W = torch.sigmoid(W)
+        return W / (torch.sum(W, dim=1, keepdim=True))
+
+
+    def modify_W_from_var(self, W, var, epsison=0.000001):
+        b = W.size(0)
+        h, w = W.size(2), W.size(3)
+
+        var_unfolded = self.unfold_and_padding(var)
+        var_unfolded = var_unfolded.squeeze(2).view(b, h, w, self.size_p_kernel)
+        var_unfolded = var_unfolded.permute(0, 3, 1, 2).contiguous()
+
+        W_var = torch.sigmoid(torch.reciprocal(var_unfolded + epsison))
+        return W * W_var
+
+
+

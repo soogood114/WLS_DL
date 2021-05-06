@@ -4,16 +4,16 @@ import torch
 import Feed_and_Loss.loss as my_loss
 
 class NGPT_PU(nn.Module):
-    def __init__(self, in_dim, out_dim):
+    def __init__(self, in_dim, out_dim, padding_mode='zeros'):
         super(NGPT_PU, self).__init__()
 
         self.conv1x1 = nn.Sequential(
-            nn.Conv2d(in_dim, 2 * out_dim, 1),
+            nn.Conv2d(in_dim, 2 * out_dim, 1, padding_mode=padding_mode),
             nn.LeakyReLU()
         )
 
         self.conv3x3 = nn.Sequential(
-            nn.Conv2d(2 * out_dim, out_dim, 3, padding=1),
+            nn.Conv2d(2 * out_dim, out_dim, 3, padding=1, padding_mode=padding_mode),
             nn.LeakyReLU()
         )
 
@@ -29,8 +29,15 @@ class Back_bone_NGPT_v1(nn.Module):
     """ 인풋 : 각각 들어간다.  아웃풋 : 타일"""
     """ SIGA19에서 나온 supervised 논문에서의 네트워크를 구현"""
 
-    def __init__(self, params, channels_in=5, out_dim=3):
+    def __init__(self, params, channels_in=5, out_dim=3, padding_mode='zeros'):
         super(Back_bone_NGPT_v1, self).__init__()
+
+        self.padding_list = ['zeros', 'reflect', 'replicate', 'circular']
+        self.padding_mode = padding_mode
+
+        if not padding_mode in self.padding_list:
+            print("Please give the right padding mode !! ")
+            return
 
         self.channels_in = channels_in  # RGB + Features
 
@@ -44,7 +51,7 @@ class Back_bone_NGPT_v1(nn.Module):
         self.en1_PU4 = NGPT_PU(channels_in + 40 * 3, 40)
 
         # down
-        self.en1_down_conv = nn.Conv2d(40 * 4 + channels_in, 160, 2, stride=2)
+        self.en1_down_conv = nn.Conv2d(40 * 4 + channels_in, 160, 2, stride=2, padding_mode=padding_mode)
         self.en1_down_conv_relu = nn.LeakyReLU()
         self.en1_num_ch = 40 * 4 + channels_in
 
@@ -55,7 +62,7 @@ class Back_bone_NGPT_v1(nn.Module):
         self.en2_PU3 = NGPT_PU(160 + 80 * 2, 80)
 
         # down
-        self.en2_down_conv = nn.Conv2d(80 * 3 + 160, 160, 2, stride=2)
+        self.en2_down_conv = nn.Conv2d(80 * 3 + 160, 160, 2, stride=2, padding_mode=padding_mode)
         self.en2_down_conv_relu = nn.LeakyReLU()
         self.en2_num_ch = 80 * 3 + 160
 
@@ -65,7 +72,7 @@ class Back_bone_NGPT_v1(nn.Module):
         self.en3_PU2 = NGPT_PU(160 + 80, 80)
 
         # down
-        self.en3_down_conv = nn.Conv2d(80 * 2 + 160, 160, 2, stride=2)
+        self.en3_down_conv = nn.Conv2d(80 * 2 + 160, 160, 2, stride=2, padding_mode=padding_mode)
         self.en3_down_conv_relu = nn.LeakyReLU()
         self.en3_num_ch = 80 * 2 + 160
 
@@ -107,7 +114,7 @@ class Back_bone_NGPT_v1(nn.Module):
         self.de3_PU4 = NGPT_PU(80 + self.en1_num_ch + 40 * 3, 40)
 
         # down -> out_ch
-        self.de3_up_conv = nn.Conv2d(80 + self.en1_num_ch + 40 * 4, out_dim, 3, padding=1)
+        self.de3_up_conv = nn.Conv2d(80 + self.en1_num_ch + 40 * 4, out_dim, 3, padding=1, padding_mode=padding_mode)
         self.de3_up_conv_relu = nn.ReLU()
 
         "NEW ONE"
@@ -218,10 +225,18 @@ class Back_bone_NGPT_v2(nn.Module):
     """ SIGA19에서 나온 supervised 논문에서의 네트워크를 구현"""
     """ v1과는 다른 것은 layer가 적어서 좀더 가볍다는 것."""
 
-    def __init__(self, params, channels_in=5, out_dim=3):
+    def __init__(self, params, channels_in=5, out_dim=3, padding_mode='zeros'):
         super(Back_bone_NGPT_v2, self).__init__()
 
+        self.padding_list = ['zeros', 'reflect', 'replicate', 'circular']
+        self.padding_mode = padding_mode
+
+        if not padding_mode in self.padding_list:
+            print("Please give the right padding mode !! ")
+            return
+
         self.channels_in = channels_in  # RGB + Features
+        self.channels_out = out_dim
 
         # self.Kernel_size = kernel_size
         # self.k_size = pred_kernel
@@ -233,7 +248,7 @@ class Back_bone_NGPT_v2(nn.Module):
         self.en1_PU4 = NGPT_PU(channels_in + 20 * 3, 20)
 
         # down
-        self.en1_down_conv = nn.Conv2d(20 * 4 + channels_in, 80, 2, stride=2)
+        self.en1_down_conv = nn.Conv2d(20 * 4 + channels_in, 80, 2, stride=2, padding_mode=padding_mode)
         self.en1_down_conv_relu = nn.LeakyReLU()
         self.en1_num_ch = 20 * 4 + channels_in
 
@@ -243,7 +258,7 @@ class Back_bone_NGPT_v2(nn.Module):
         self.en2_PU3 = NGPT_PU(80 + 40 * 2, 40)
 
         # down
-        self.en2_down_conv = nn.Conv2d(40 * 3 + 80, 80, 2, stride=2)
+        self.en2_down_conv = nn.Conv2d(40 * 3 + 80, 80, 2, stride=2, padding_mode=padding_mode)
         self.en2_down_conv_relu = nn.LeakyReLU()
         self.en2_num_ch = 40 * 3 + 80
 
@@ -274,8 +289,8 @@ class Back_bone_NGPT_v2(nn.Module):
         self.de3_PU4 = NGPT_PU(40 + self.en1_num_ch + 20 * 3, 20)
 
         # down -> out_ch
-        self.de3_up_conv = nn.Conv2d(40 + self.en1_num_ch + 20 * 4, out_dim, 3, padding=1)
-        self.de3_up_conv_relu = nn.LeakyReLU()
+        self.de3_up_conv = nn.Conv2d(40 + self.en1_num_ch + 20 * 4, out_dim, 3, padding=1, padding_mode=padding_mode)
+        self.de3_up_conv_relu = nn.ReLU()
 
     def forward(self, input):
         """First encoding block"""
@@ -347,8 +362,13 @@ class Back_bone_NGPT_v2(nn.Module):
     def get_loss(self, out, ref):
         "이건 PR net 비교를 위해 새로 추가 됨"
 
-        ref_col = ref[:, :3, :, :]
+        ref_col = ref[:, :, :, :]
 
         data_loss = self.loss(out, ref_col)
 
         return data_loss
+
+
+
+
+

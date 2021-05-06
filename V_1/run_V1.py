@@ -24,16 +24,16 @@ params_default = {
 
     # 새로 추가 !!
     'img_by_img': True,
-    'img_by_img_type': "torch",  # h5 : h5, torch : torch.data
-    'num_workers': 1,
+    'img_by_img_type': "h5",  # h5 : h5, torch : torch.data
+    'num_workers': 0,
 
 
     # 3. Design matrix
     "grid_order": 1,
 
     # 4. Image and batch size & iterations
-    'batch_size': 8,  # 32  배치사이즈가 지나치게 크게 되면 자동으로 잘라준다.
-    'epochs': 100,
+    'batch_size': 6,  # 32  배치사이즈가 지나치게 크게 되면 자동으로 잘라준다.
+    'epochs': 2500,
     'patch_size': 128,  # 200
     'multi_crop': False,
 
@@ -52,22 +52,26 @@ params_default = {
 
     # 8. Saving period
     "para_saving_epoch": 50,  # 50
-    "loss_saving_epoch": 10,  # 이건 지금 쓰이고 있질 않음. epoch마다 저장  10
+    "loss_saving_epoch": 1,  # 이건 지금 쓰이고 있질 않음. epoch마다 저장  10
     "val_patches_saving_epoch": 1,  # 50
 
     # 9. Index setting for run and network functions
     'run_index': 0,
+
+    # !!! 새로 추가 !!!
+    'pipeline_mode': True,
     'network_name': "WLS_net_FG_v2",  # WLS_net_v1, KPCN_v1, WLS_net_FG_v1
     'network_index': 0,
+    'model_pipeline_name': "WLS_net_FG_Pipeline_v1",  # WLS_net_FG_Pipeline_v1, WLS_net_Gde_FG_Pipeline_v1
 
     # 10. Saving folder setting
-    'saving_folder_name': "210428_tttt",
+    'saving_folder_name': "210506_tttt",
     # 210326_model_stack_v2_epoch_2k_W_half_nonorm_smape
     # 210331_model_stack_v2_patch_size_100_mini_unfolded_no_order
 
     'saving_sub_folder_name': None,  # if None, it will replaced to time, day string
 
-    'saving_file_name': "210428_tttt",
+    'saving_file_name': "210506_tttt",
 
 }
 
@@ -133,7 +137,7 @@ def data_load_and_run(params=None, gpu_id=1):
                        'curly-hair', 'staircase2', 'glass-of-water', 'teapot-full']
 
         buffer_list = ['diffuse', 'specular', 'albedo', 'depth', 'normal', 'diffuseVariance',
-                                              'specularVariance', 'albedoVariance', 'depthVariance', 'normalVariance']
+                       'specularVariance', 'albedoVariance', 'depthVariance', 'normalVariance', 'colorVariance']
 
         train_input_path, train_ref_path = load.get_all_pth_from_tungsten_torch_data(train_dirs, train_scenes,
                                                                                          buffer_list,
@@ -149,9 +153,14 @@ def data_load_and_run(params=None, gpu_id=1):
                                                                                    params['img_by_img_type']
                                                                                    )
 
-        ttv.train_test_model_v1(params, train_input_path, train_ref_path, test_input_path, test_ref_path,
-                                TEST_MODE=params['trained_model_TEST'], RE_TRAIN=params['trained_model_RETRAIN'],
-                                IMG_BY_IMG=params['img_by_img'])
+        if params['pipeline_mode']:
+            ttv.train_test_model_v_pipeline(params, train_input_path, train_ref_path, test_input_path, test_ref_path,
+                                    TEST_MODE=params['trained_model_TEST'], RE_TRAIN=params['trained_model_RETRAIN'],
+                                    IMG_BY_IMG=params['img_by_img'])
+        else:
+            ttv.train_test_model_v1(params, train_input_path, train_ref_path, test_input_path, test_ref_path,
+                                    TEST_MODE=params['trained_model_TEST'], RE_TRAIN=params['trained_model_RETRAIN'],
+                                    IMG_BY_IMG=params['img_by_img'])
 
 
     else:
@@ -208,4 +217,4 @@ def one_exr_load_and_test(test_params, input_pth, ref_pth, BUFFER, gpu_id=1):
 
     input_buffer, ref_buffer = load.load_normalize_one_exr_for_test(input_pth, ref_pth, BUFFER, load_dtype="FLOAT")
 
-    ttv.test_for_one_exr(test_params, input_buffer, ref_buffer)
+    ttv.test_for_one_exr_v1(test_params, input_buffer, ref_buffer)
