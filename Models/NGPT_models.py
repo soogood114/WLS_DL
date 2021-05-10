@@ -4,7 +4,7 @@ import torch
 import Feed_and_Loss.loss as my_loss
 
 class NGPT_PU(nn.Module):
-    def __init__(self, in_dim, out_dim, padding_mode='zeros'):
+    def __init__(self, in_dim, out_dim, kernel_size=3,padding_mode='zeros'):
         super(NGPT_PU, self).__init__()
 
         self.conv1x1 = nn.Sequential(
@@ -13,7 +13,7 @@ class NGPT_PU(nn.Module):
         )
 
         self.conv3x3 = nn.Sequential(
-            nn.Conv2d(2 * out_dim, out_dim, 3, padding=1, padding_mode=padding_mode),
+            nn.Conv2d(2 * out_dim, out_dim, kernel_size, padding=kernel_size//2, padding_mode=padding_mode),
             nn.LeakyReLU()
         )
 
@@ -225,11 +225,12 @@ class Back_bone_NGPT_v2(nn.Module):
     """ SIGA19에서 나온 supervised 논문에서의 네트워크를 구현"""
     """ v1과는 다른 것은 layer가 적어서 좀더 가볍다는 것."""
 
-    def __init__(self, params, channels_in=5, out_dim=3, padding_mode='zeros'):
+    def __init__(self, params, channels_in=5, out_dim=3, kernel_size=3, padding_mode='zeros'):
         super(Back_bone_NGPT_v2, self).__init__()
 
         self.padding_list = ['zeros', 'reflect', 'replicate', 'circular']
         self.padding_mode = padding_mode
+        self.kernel_size = kernel_size
 
         if not padding_mode in self.padding_list:
             print("Please give the right padding mode !! ")
@@ -242,10 +243,10 @@ class Back_bone_NGPT_v2(nn.Module):
         # self.k_size = pred_kernel
 
         """First encoding block"""
-        self.en1_PU1 = NGPT_PU(channels_in, 20)
-        self.en1_PU2 = NGPT_PU(channels_in + 20, 20)
-        self.en1_PU3 = NGPT_PU(channels_in + 20 * 2, 20)
-        self.en1_PU4 = NGPT_PU(channels_in + 20 * 3, 20)
+        self.en1_PU1 = NGPT_PU(channels_in, 20, kernel_size)
+        self.en1_PU2 = NGPT_PU(channels_in + 20, 20, kernel_size)
+        self.en1_PU3 = NGPT_PU(channels_in + 20 * 2, 20, kernel_size)
+        self.en1_PU4 = NGPT_PU(channels_in + 20 * 3, 20, kernel_size)
 
         # down
         self.en1_down_conv = nn.Conv2d(20 * 4 + channels_in, 80, 2, stride=2, padding_mode=padding_mode)
@@ -253,9 +254,9 @@ class Back_bone_NGPT_v2(nn.Module):
         self.en1_num_ch = 20 * 4 + channels_in
 
         """Second encoding block"""
-        self.en2_PU1 = NGPT_PU(80, 40)
-        self.en2_PU2 = NGPT_PU(80 + 40, 40)
-        self.en2_PU3 = NGPT_PU(80 + 40 * 2, 40)
+        self.en2_PU1 = NGPT_PU(80, 40, kernel_size)
+        self.en2_PU2 = NGPT_PU(80 + 40, 40, kernel_size)
+        self.en2_PU3 = NGPT_PU(80 + 40 * 2, 40, kernel_size)
 
         # down
         self.en2_down_conv = nn.Conv2d(40 * 3 + 80, 80, 2, stride=2, padding_mode=padding_mode)
@@ -263,10 +264,10 @@ class Back_bone_NGPT_v2(nn.Module):
         self.en2_num_ch = 40 * 3 + 80
 
         """Latent encoding block"""
-        self.l_PU1 = NGPT_PU(80, 40)
-        self.l_PU2 = NGPT_PU(80 + 40, 40)
-        self.l_PU3 = NGPT_PU(80 + 40 * 2, 40)
-        self.l_PU4 = NGPT_PU(80 + 40 * 3, 40)
+        self.l_PU1 = NGPT_PU(80, 40, kernel_size)
+        self.l_PU2 = NGPT_PU(80 + 40, 40, kernel_size)
+        self.l_PU3 = NGPT_PU(80 + 40 * 2, 40, kernel_size)
+        self.l_PU4 = NGPT_PU(80 + 40 * 3, 40, kernel_size)
 
         # up
         self.l_up_conv = nn.ConvTranspose2d(40 * 4 + 80, 80, 2, stride=2, padding=0)
@@ -274,19 +275,19 @@ class Back_bone_NGPT_v2(nn.Module):
         self.l_num_ch = 40 * 4 + 80
 
         """Second decoding block"""
-        self.de2_PU1 = NGPT_PU(80 + self.en2_num_ch, 40)
-        self.de2_PU2 = NGPT_PU(80 + self.en2_num_ch + 40, 40)
-        self.de2_PU3 = NGPT_PU(80 + self.en2_num_ch + 40 * 2, 40)
+        self.de2_PU1 = NGPT_PU(80 + self.en2_num_ch, 40, kernel_size)
+        self.de2_PU2 = NGPT_PU(80 + self.en2_num_ch + 40, 40, kernel_size)
+        self.de2_PU3 = NGPT_PU(80 + self.en2_num_ch + 40 * 2, 40, kernel_size)
 
         # up
         self.de2_up_conv = nn.ConvTranspose2d(80 + self.en2_num_ch + 40 * 3, 40, 2, stride=2, padding=0)
         self.de2_up_conv_relu = nn.LeakyReLU()
 
         """Third decoding block"""
-        self.de3_PU1 = NGPT_PU(40 + self.en1_num_ch, 20)
-        self.de3_PU2 = NGPT_PU(40 + self.en1_num_ch + 20, 20)
-        self.de3_PU3 = NGPT_PU(40 + self.en1_num_ch + 20 * 2, 20)
-        self.de3_PU4 = NGPT_PU(40 + self.en1_num_ch + 20 * 3, 20)
+        self.de3_PU1 = NGPT_PU(40 + self.en1_num_ch, 20, kernel_size)
+        self.de3_PU2 = NGPT_PU(40 + self.en1_num_ch + 20, 20, kernel_size)
+        self.de3_PU3 = NGPT_PU(40 + self.en1_num_ch + 20 * 2, 20, kernel_size)
+        self.de3_PU4 = NGPT_PU(40 + self.en1_num_ch + 20 * 3, 20, kernel_size)
 
         # down -> out_ch
         self.de3_up_conv = nn.Conv2d(40 + self.en1_num_ch + 20 * 4, out_dim, 3, padding=1, padding_mode=padding_mode)

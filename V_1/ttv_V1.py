@@ -529,7 +529,7 @@ def train_test_model_v_pipeline(params, train_input_buffer, train_ref_buffer, te
                     FT.IBI_RandomCrop_np(params['patch_size'], buffer_list),
                     FT.IBI_RandomFlip_np(params['multi_crop'], buffer_list),
                     FT.IBI_PermuteColor_np(params['multi_crop'], buffer_list),
-                    FT.IBI_Normalize_Concat_To_GPU_np_v_pipeline(params['multi_crop'], buffer_list)
+                    FT.IBI_Normalize_Concat_To_Tensor_np_v_pipeline(params['multi_crop'], buffer_list)
                 ])
                 train_data = dataset.Supervised_dataset_img_by_img_np(train_input_buffer, train_ref_buffer,
                                                                           buffer_list,
@@ -587,20 +587,20 @@ def train_test_model_v_pipeline(params, train_input_buffer, train_ref_buffer, te
         base_loss_fn = loss_fn
 
         # sub net
-        g_buff_net = models_KPCN.KPCN_for_FG_v1(params, ch_in=(7 + 3), kernel_size=3, n_layers=10, length_p_kernel=9,
-                                            no_soft_max=True, pad_mode=1, is_resnet=True, resi_train=False,
+        g_buff_net = models_KPCN.KPCN_for_FG_v1(params, ch_in=(7 + 3), kernel_size=3, n_layers=12, length_p_kernel=21,
+                                            no_soft_max=False, pad_mode=1, is_resnet=True, resi_train=True,
                                                 use_W_var=False).train().to(device)
 
         # g_buff_net = models_NGPT.Back_bone_NGPT_v2(params, channels_in=(7 + 3),
-        #                                            out_dim=7, padding_mode='reflect').train().to(device)
+        #                                            out_dim=   7, padding_mode='reflect').train().to(device)
 
         base_net = models_v2.WLS_net_FG_v2(params, base_loss_fn, ch_in=11, kernel_size=3, n_layers=50,
                 length_p_kernel=21, epsilon=0.00001,
-                 pad_mode=1, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=-1,
+                 pad_mode=1, loss_type=0, kernel_accum=False, norm_in_window=True, is_resnet=True, FG_mode=2,
                  soft_max_W=True, resi_train=False, g_buff_list=[True, True, True]).train().to(device)
 
         model_pipeline = model_pipelines_v1.WLS_net_Gde_FG_Pipeline_v1(params, g_buff_net, base_net,
-                                                                       g_buff_loss_fn, base_loss_fn, 2000)
+                                                                       g_buff_loss_fn, base_loss_fn, 0)
 
         shutil.copy("../Models/models_v2.py", saving_code_folder_name + "/saved_models_v2.py")
         shutil.copy("../Models/models_KPCN.py", saving_code_folder_name + "/saved_models_KPCN.py")
@@ -710,7 +710,7 @@ def train_test_model_v_pipeline(params, train_input_buffer, train_ref_buffer, te
     if IMG_BY_IMG:
         if params['img_by_img_type'] == "h5":
             # h5py
-            transform_img = transforms.Compose([FT.IBI_Normalize_Concat_To_GPU_np_v_pipeline(params['multi_crop'], buffer_list)])  # targeting for image
+            transform_img = transforms.Compose([FT.IBI_Normalize_Concat_To_Tensor_np_v_pipeline(params['multi_crop'], buffer_list)])  # targeting for image
             # test data loader
             test_data = dataset.Supervised_dataset_img_by_img_np(test_input_buffer, test_ref_buffer, buffer_list,
                                                    train=False, transform=transform_img)

@@ -8,7 +8,7 @@ import V_1.ttv_V1 as ttv
 
 params_default = {
     # 1. Mode selection
-    "mini_batch": True,  # mini batch
+    "mini_batch": False,  # mini batch
 
     # test 용도
     'trained_model_TEST': False,  # test mode
@@ -25,7 +25,7 @@ params_default = {
     # 새로 추가 !!
     'img_by_img': True,
     'img_by_img_type': "h5",  # h5 : h5, torch : torch.data
-    'num_workers': 0,
+    'num_workers': 6,
 
 
     # 3. Design matrix
@@ -33,7 +33,7 @@ params_default = {
 
     # 4. Image and batch size & iterations
     'batch_size': 6,  # 32  배치사이즈가 지나치게 크게 되면 자동으로 잘라준다.
-    'epochs': 2500,
+    'epochs': 1000,
     'patch_size': 128,  # 200
     'multi_crop': False,
 
@@ -52,26 +52,28 @@ params_default = {
 
     # 8. Saving period
     "para_saving_epoch": 50,  # 50
-    "loss_saving_epoch": 1,  # 이건 지금 쓰이고 있질 않음. epoch마다 저장  10
-    "val_patches_saving_epoch": 1,  # 50
+    "loss_saving_epoch": 10,  # 이건 지금 쓰이고 있질 않음. epoch마다 저장  10
+    "val_patches_saving_epoch": 50,  # 50
 
     # 9. Index setting for run and network functions
     'run_index': 0,
 
     # !!! 새로 추가 !!!
-    'pipeline_mode': True,
+
     'network_name': "WLS_net_FG_v2",  # WLS_net_v1, KPCN_v1, WLS_net_FG_v1
     'network_index': 0,
-    'model_pipeline_name': "WLS_net_FG_Pipeline_v1",  # WLS_net_FG_Pipeline_v1, WLS_net_Gde_FG_Pipeline_v1
+
+    'pipeline_mode': True,
+    'model_pipeline_name': "WLS_net_Gde_FG_Pipeline_v1",  # WLS_net_FG_Pipeline_v1, WLS_net_Gde_FG_Pipeline_v1
 
     # 10. Saving folder setting
-    'saving_folder_name': "210506_tttt",
+    'saving_folder_name': "210510_WLS_net_Gde_FG_Pipeline_v1_epoch_1k",
     # 210326_model_stack_v2_epoch_2k_W_half_nonorm_smape
     # 210331_model_stack_v2_patch_size_100_mini_unfolded_no_order
 
     'saving_sub_folder_name': None,  # if None, it will replaced to time, day string
 
-    'saving_file_name': "210506_tttt",
+    'saving_file_name': "210510_WLS_net_Gde_FG_Pipeline_v1_epoch_1k",
 
 }
 

@@ -393,6 +393,7 @@ class KPCN_for_FG_v1(nn.Module):
         else:
             return out.view(b, h, w, ch).permute(0, 3, 1, 2)
 
+
     def test_chunkwise(self, input_full, chunk_size=200):
         """
         아직 구현이 안됨.
@@ -415,12 +416,34 @@ class KPCN_for_FG_v1(nn.Module):
         feature = self.feature_layers_feed(input_full)
 
         "W FROM THE FEATURE"
-        W_full = self.layers_for_weights_feed(feature)  # b, size_Pkernel, h, w
+        W_albedo_full = self.W_albedo_feed(feature)  # b, size_Pkernel, h, w,
+        W_depth_full = self.W_depth_feed(feature)
+        W_normal_full = self.W_normal_feed(feature)
 
-        if self.no_soft_max:
-            W_full = self.reg_W_without_soft_max(W_full)
+        if self.use_W_var:
+            W_albedo_full = self.modify_W_from_var(W_albedo_full, input_full[:, 7, :, :].unsqueeze(1))
+            W_depth_full = self.modify_W_from_var(W_depth_full, input_full[:, 8, :, :].unsqueeze(1))
+            W_normal_full = self.modify_W_from_var(W_normal_full, input_full[:, 9, :, :].unsqueeze(1))
+
+        if self.resi_train:
+            W_albedo_full = torch.sigmoid(W_albedo_full)
+            W_depth_full = torch.sigmoid(W_depth_full)
+            W_normal_full = torch.sigmoid(W_normal_full)
+
+            W_albedo_full = W_albedo_full - torch.mean(W_albedo_full, 1).unsqueeze(1).expand_as(W_albedo_full)
+            W_depth_full = W_depth_full - torch.mean(W_depth_full, 1).unsqueeze(1).expand_as(W_depth_full)
+            W_normal_full = W_normal_full - torch.mean(W_normal_full, 1).unsqueeze(1).expand_as(W_normal_full)
         else:
-            W_full = F.softmax(W_full, dim=1)
+            if self.no_soft_max:
+                W_albedo_full = self.reg_W_without_soft_max(W_albedo_full)
+                W_depth_full = self.reg_W_without_soft_max(W_depth_full)
+                W_normal_full = self.reg_W_without_soft_max(W_normal_full)
+            else:
+                W_albedo_full = F.softmax(W_albedo_full, dim=1)
+                W_depth_full = F.softmax(W_depth_full, dim=1)
+                W_normal_full = F.softmax(W_normal_full, dim=1)
+
+
 
         # W = W.view((b * hw), size_Pkernel)
 
@@ -453,14 +476,19 @@ class KPCN_for_FG_v1(nn.Module):
                 input = input_full[:, :, h_start_p:h_end_p, w_start_p:w_end_p]  # 지금 padding 된 상태
 
                 # padding 진행 안됨.
-                W = W_full[:, :, h_start:h_end, w_start:w_end]
+                W_albedo = W_albedo_full[:, :, h_start:h_end, w_start:w_end]
+                W_depth = W_depth_full[:, :, h_start:h_end, w_start:w_end]
+                W_normal = W_normal_full[:, :, h_start:h_end, w_start:w_end]
 
                 "KERNEL REGRESSION"
-                out = self.kernel_regression(input[:, :7, :, :], W, test_mode=True)
+                out = self.kernel_regression(input[:, :7, :, :], W_albedo, W_depth, W_normal, test_mode=True)
 
-                out_full[:, :, h_start:h_end, w_start:w_end] = out.view(b, h, w, 3).permute(0, 3, 1, 2)
+                out_full[:, :, h_start:h_end, w_start:w_end] = out.view(b, h, w, ch).permute(0, 3, 1, 2)
 
-        return out_full
+        if self.resi_train:
+            return out_full + input_full[:, :7, :, :]
+        else:
+            return out_full
 
 
     def kernel_regression(self, input, W_albedo, W_depth, W_normal, test_mode=True):

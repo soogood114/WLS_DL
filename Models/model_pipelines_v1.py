@@ -97,6 +97,12 @@ class WLS_net_Gde_FG_Pipeline_v1(nn.Module):
         output : resulting image and loss
 
         """
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+        input['ref_color'] = input['ref_color'].to(self.device)
+        input['ref_g_buff_net'] = input['ref_g_buff_net'].to(self.device)
+
         "INITIAL SETTING"
         self.optimizer_for_g_buff_net.zero_grad()
         self.optimizer_for_base_net.zero_grad()
@@ -138,11 +144,16 @@ class WLS_net_Gde_FG_Pipeline_v1(nn.Module):
 
 
     def test(self, input, chunk_size=200):
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+
+
         self.g_buff_net.eval()
         self.base_net.eval()
 
-        # out_g_buff_net = self.g_buff_net.test_chunkwise(input['in_g_buff_net'], chunk_size=chunk_size)
-        out_g_buff_net = self.g_buff_net(input['in_g_buff_net'])
+        out_g_buff_net = self.g_buff_net.test_chunkwise(input['in_g_buff_net'], chunk_size=chunk_size)
+        # out_g_buff_net = self.g_buff_net(input['in_g_buff_net'])
 
         in_base_net = torch.cat((input['in_color'], out_g_buff_net.detach(), input['in_colorVar']), dim=1)
         out_base_net = self.base_net.test_chunkwise(in_base_net, chunk_size=chunk_size)
@@ -194,10 +205,21 @@ class WLS_net_Gde_FG_Pipeline_v1(nn.Module):
 
 
     def save_inter_results(self, epoch, input):
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+        input['ref_color'] = input['ref_color'].to(self.device)
+        input['ref_g_buff_net'] = input['ref_g_buff_net'].to(self.device)
+
         if (epoch + 1) % self.params["val_patches_saving_epoch"] == 0:
             inter_patch_folder_name = self.params["saving_sub_folder_name"] + "/val_patches"
             if not os.path.exists(inter_patch_folder_name):
                 os.mkdir(inter_patch_folder_name)
+
+            FG_net_out = self.base_net.get_FG_net_out()
+            if FG_net_out != None:
+                out_FG_net_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(
+                    FG_net_out[:, 0:3, :, :])
 
             in_albedo_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(input['in_g_buff_net'][:, 0:3, :, :])
             in_depth_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(input['in_g_buff_net'][:, 3, :, :].unsqueeze(1))
@@ -255,12 +277,28 @@ class WLS_net_Gde_FG_Pipeline_v1(nn.Module):
                     exr.write(inter_patch_folder_name + "/epoch_" + str(epoch) + "_" + str(l) + "_color_ref.exr",
                               y_np_saving[l, :, :, 0:3])
 
+                    if FG_net_out != None:
+                        exr.write(inter_patch_folder_name + "/epoch_" + str(epoch) + "_" + str(l) + "_g_FG_out.exr",
+                                  out_FG_net_np_saving[l, :, :, :])
+
 
     def save_final_results(self, input, out_folder_name, f, image_index):
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+        input['ref_color'] = input['ref_color'].to(self.device)
+        input['ref_g_buff_net'] = input['ref_g_buff_net'].to(self.device)
+
         "FROM TORCH TENSOR TO NUMPY TENSOR"
         x_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(input['in_color'])
         y_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(input['ref_color'])
         y_pred_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(self.out_base_net)
+
+        FG_net_out = self.base_net.get_FG_net_out()
+        if FG_net_out != None:
+            out_FG_net_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(
+                FG_net_out[:, 0:3, :, :])
+
 
         out_albedo_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(self.out_g_buff_net[:, 0:3, :, :])
         out_depth_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(
@@ -295,6 +333,10 @@ class WLS_net_Gde_FG_Pipeline_v1(nn.Module):
                   out_depth_np_saving[0])
         exr.write(out_folder_name + "/" + self.params['saving_file_name'] + "_" + str(image_index) + "_z_normal.exr",
                   out_normal_np_saving[0])
+
+        if FG_net_out != None:
+            exr.write(out_folder_name + "/" + self.params['saving_file_name'] + "_" + str(image_index) + "_z_FG_out.exr",
+                      out_FG_net_np_saving[0])
 
     def get_current_losses(self):
         return self.current_loss_g_buff_net, self.current_loss_base_net
@@ -355,6 +397,12 @@ class WLS_net_FG_Pipeline_v1(nn.Module):
         output : resulting image and loss
 
         """
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+        input['ref_color'] = input['ref_color'].to(self.device)
+
+
         "INITIAL SETTING"
         self.optimizer_for_base_net.zero_grad()
 
@@ -380,6 +428,10 @@ class WLS_net_FG_Pipeline_v1(nn.Module):
 
 
     def test(self, input, chunk_size=200):
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+
         self.base_net.eval()
 
         if self.use_g_buff_var:
@@ -431,6 +483,11 @@ class WLS_net_FG_Pipeline_v1(nn.Module):
         return saved_torch_para['epoch']
 
     def save_inter_results(self, epoch, input):
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+        input['ref_color'] = input['ref_color'].to(self.device)
+
         if (epoch + 1) % self.params["val_patches_saving_epoch"] == 0:
             inter_patch_folder_name = self.params["saving_sub_folder_name"] + "/val_patches"
             if not os.path.exists(inter_patch_folder_name):
@@ -494,6 +551,11 @@ class WLS_net_FG_Pipeline_v1(nn.Module):
 
 
     def save_final_results(self, input, out_folder_name, f, image_index):
+        input['in_g_buff_net'] = input['in_g_buff_net'].to(self.device)
+        input['in_color'] = input['in_color'].to(self.device)
+        input['in_colorVar'] = input['in_colorVar'].to(self.device)
+        input['ref_color'] = input['ref_color'].to(self.device)
+
         "FROM TORCH TENSOR TO NUMPY TENSOR"
         x_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(input['in_color'])
         y_np_saving = other_tools.from_torch_tensor_img_to_full_res_numpy(input['ref_color'])

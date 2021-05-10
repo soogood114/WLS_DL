@@ -961,7 +961,7 @@ class IBI_Normalize_Concat_np_v1(object):
         return {'input': input, 'target': target}
 
 
-class IBI_Normalize_Concat_To_GPU_np_v_pipeline(object):
+class IBI_Normalize_Concat_To_Tensor_np_v_pipeline(object):
     """
     Args:
         IBI : image by image의 줄임말
@@ -1003,13 +1003,18 @@ class IBI_Normalize_Concat_To_GPU_np_v_pipeline(object):
         input_albedo = input_dict["albedo"]
         target_albedo = target_dict["albedo"]
 
+
         # depth normalization
         if input_dict["max_depth"] == 0:
             input_depth = input_dict["depth"] / (input_dict["max_depth"] + 0.0000001)
             target_depth = target_dict["depth"] / (target_dict["max_depth"] + 0.0000001)
+
+            input_depth_var = input_dict["depthVariance"] / (np.square(input_dict["max_depth"]) + 0.0000001)
         else:
             input_depth = input_dict["depth"] / (input_dict["max_depth"])
             target_depth = target_dict["depth"] / (target_dict["max_depth"])
+
+            input_depth_var = input_dict["depthVariance"] / (np.square(input_dict["max_depth"]))
 
         # normal normalization
         input_normal = (input_dict["normal"] + 1) / 2
@@ -1017,16 +1022,17 @@ class IBI_Normalize_Concat_To_GPU_np_v_pipeline(object):
 
         if not self.multi_crop:
             in_g_buff_net = np.concatenate((input_albedo, input_depth, input_normal, input_dict["albedoVariance"],
-                                            input_dict["depthVariance"], input_dict["normalVariance"]), axis=2)
+                                            input_depth_var, input_dict["normalVariance"]), axis=2)
             ref_g_buff_net = np.concatenate((target_albedo, target_depth, target_normal), axis=2)
 
         else:
             in_g_buff_net = np.concatenate((input_albedo, input_depth, input_normal, input_dict["albedoVariance"],
-                                            input_dict["depthVariance"], input_dict["normalVariance"]), axis=3)
+                                            input_depth_var, input_dict["normalVariance"]), axis=3)
             ref_g_buff_net = np.concatenate((target_albedo, target_depth, target_normal), axis=3)
 
         in_g_buff_net = np.nan_to_num(in_g_buff_net, nan=0.0, posinf=0.0)
         ref_g_buff_net = np.nan_to_num(ref_g_buff_net, nan=0.0, posinf=0.0)
+        input_colorVar = np.nan_to_num(input_colorVar, nan=0.0, posinf=0.0)
 
         return {
             'in_color': self.to_gpu_tensor(input_color),
@@ -1043,7 +1049,7 @@ class IBI_Normalize_Concat_To_GPU_np_v_pipeline(object):
         else:
             input = input.transpose((0, 3, 1, 2))
 
-        return torch.from_numpy(input).to(self.device)
+        return torch.from_numpy(input)
 
 
 

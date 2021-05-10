@@ -28,11 +28,14 @@ class Design_feature_generator(nn.Module):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if type_index == 1:
-            self.back_bone = NGPT.Back_bone_NGPT_v2(params, channels_in=ch_in, out_dim=ch_out).train().to(device)
+            self.back_bone = NGPT.Back_bone_NGPT_v2(params, channels_in=ch_in,
+                                                    out_dim=ch_out, kernel_size=3).train().to(device)
             print("FG_net setting : NGPT AE")
         else:
-            self.back_bone = models_others.FG_pixtransform_v1(ch_in=ch_in, ch_out=ch_out).train().to(device)
-            print("FG_net setting : pix transform")
+            # self.back_bone = models_others.FG_pixtransform_v1(ch_in=ch_in, ch_out=ch_out).train().to(device)
+            self.back_bone = NGPT.Back_bone_NGPT_v2(params, channels_in=ch_in,
+                                                    out_dim=ch_out, kernel_size=1).train().to(device)
+            print("FG_net setting : NGPT AE 1x1 (pix transform)")
         # self.back_bone = NGPT.Back_bone_NGPT_v1(params, channels_in=ch_in, out_dim=ch_out).train().to(device)
 
     def forward(self, input):
